@@ -217,7 +217,7 @@ update_bxc(){
 
 	log "Dowanlod update package..."
 	cd /tmp/ && rm -fr /tmp/bxc*
-	wget -q -t 3 -O $BXC_PKG "https://raw.githubusercontent.com/BonusCloud/BxC-Node/master/bxc.tar.gz" > /dev/null 2>&1
+	wget -q -t 3 -O $BXC_PKG "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/bxc.tar.gz" > /dev/null 2>&1
 	if [ -s $BXC_PKG ];then
 		tar -zxf $BXC_PKG
 		log "Copy update files..."
@@ -237,7 +237,7 @@ update_bxc(){
 
 		rm -rf /tmp/bxc* >/dev/null 2>&1
 	else
-		log "Dowanlod update package failed: wget -q -t 3 -O $BXC_PKG 'https://raw.githubusercontent.com/BonusCloud/BxC-Node/master/bxc.tar.gz'"
+		log "Dowanlod update package failed: wget -q -t 3 -O $BXC_PKG 'https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/bxc.tar.gz'"
 	fi
 }
 
