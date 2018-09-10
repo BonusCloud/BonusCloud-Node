@@ -1,6 +1,6 @@
 # BonusCloud-Node
 
-Lite Node APP Download：https://github.com/BonusCloud/BonusCloud-Node/blob/master/bxc.tar.gz
+Download：https://github.com/BonusCloud/BonusCloud-Node/blob/master/bxc.tar.gz
 
 Arm v7 Lite Node running in Merlin with koolshare.
 
