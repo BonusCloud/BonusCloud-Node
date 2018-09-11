@@ -11,7 +11,8 @@ opkg_install() {
 	if [ $opkg_exist -ne 0 ];then
 		echo_date 系统中未检测到opkg，安装opkg...
 		mkdir -p /tmp/opt && ln -s /tmp/opt /opt > /dev/null 2>&1
-		chmod +x /tmp/bxc/scripts/bxc-tool.sh && /tmp/bxc/scripts/bxc-tool.sh > /dev/null 2>&1
+		chmod +x /koolshare/scripts/bxc-tool.sh > /dev/null 2>&1
+		/koolshare/scripts/bxc-tool.sh > /dev/null 2>&1
 	fi
 
 	opkg_exist=`which opkg > /dev/null 2>&1;echo $?`
@@ -24,7 +25,7 @@ opkg_install() {
 }
 
 pkg_install() {
-	for pkg in `cat /tmp/bxc/lib/install_order`
+	for pkg in `cat /koolshare/bxc/lib/install_order`
 	do
 		pkg_prefix=`echo "$pkg" | awk -F_ '{print $1}'`
 		
@@ -32,9 +33,10 @@ pkg_install() {
 		pkg_exist=`opkg list-installed | grep "$pkg_prefix" > /dev/null 2>&1;echo $?`
 		if [ $pkg_exist -ne 0 ];then
 			echo_date 系统未检测到"$pkg"，开始本地安装...
-			/opt/bin/opkg install "/tmp/bxc/lib/$pkg" > /dev/null 2>&1
+			/opt/bin/opkg install "/koolshare/bxc/lib/$pkg" > /dev/null 2>&1
 		else
 			echo_date 系统已安装"$pkg"
+			continue
 		fi
 
 		# 网络安装
@@ -51,7 +53,7 @@ pkg_install() {
 			echo_date 安装"$pkg"失败，退出安装！
 			exit 1
 		else
-			echo_date 安装"$pkg"成功！
+			echo_date "$pkg"安装成功！
 		fi
 	done
 }
@@ -73,7 +75,7 @@ wan_mac=`nvram get wan0_hwaddr`
 if [ "$wan_mac"x != ""x ]; then
 	echo_date 设备MAC地址为：$wan_mac
 else
-	echo_date 获取MAC地址失败，退出安装！
+	echo_date 从NVRAM获取MAC地址失败（建议设备恢复出厂设置后重新安装），退出安装！
 	exit 1
 fi
 
@@ -118,10 +120,10 @@ echo_date 安装版本信息："$CUR_VERSION"
 dbus set bxc_wan_mac="$wan_mac"
 dbus set softcenter_module_bxc_install="4"
 dbus set softcenter_module_bxc_version="$CUR_VERSION"
-dbus set softcenter_module_bxc_title="BxC-Node"
-dbus set softcenter_module_bxc_description="BxC-Node"
+dbus set softcenter_module_bxc_title="BonusCloud-Node"
+dbus set softcenter_module_bxc_description="BonusCloud-Node"
 dbus set softcenter_module_bxc_home_url=Module_BxC.asp
-dbus set softcenter_module_bxc_name="BxC-Node"
+dbus set softcenter_module_bxc_name="BonusCloud-Node"
 
 # 运行状态初始化
 echo_date 安装依赖环境...

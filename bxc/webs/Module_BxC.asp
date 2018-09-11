@@ -7,7 +7,7 @@
 		<meta HTTP-EQUIV="Expires" CONTENT="-1"/>
 		<link rel="shortcut icon" href="images/favicon.png"/>
 		<link rel="icon" href="images/favicon.png"/>
-		<title>软件中心 - BxC-Node设置</title>
+		<title>软件中心 - BonusCloud-Node设置</title>
 		<link rel="stylesheet" type="text/css" href="index_style.css"/>
 		<link rel="stylesheet" type="text/css" href="form_style.css"/>
 		<link rel="stylesheet" type="text/css" href="usp_style.css"/>
@@ -93,14 +93,10 @@
 				/*
 					检查BxC Node运行状态，开机启动状态
 				*/
-				var	bxc_status = dbus_read("bxc_status");
-				if (bxc_status == "running") {
-					document.getElementById("switch").checked=true;
-					$("#status_msg").html("BxC-Node已启动，正在BxC网络挖矿中...")
-				} else {
-					document.getElementById("switch").checked=false;
-					$("#status_msg").html("BxC-Node 没有启用！")
-				}
+				bxc_option("status")
+
+				document.getElementById("switch").checked=false;
+				$("#status_msg").html("检测BonusCloud-Node运行状态...")
 
 				var bxc_bcode = dbus_read("bxc_bcode");
 				if (bxc_bcode != "") {
@@ -114,16 +110,30 @@
 					document.getElementById("bxc_start_onboot")[1].selected=true;
 				}
 
-				// 一直检测BxC-Node运行情况
-				var intervalCheck = setInterval(function(){
-					console.log('bxc_check', dbus_read('bxc_status'));
-					bxc_option("status")
-					if(dbus_read("bxc_status") == "running"){
-    					$("#status_msg").html("BxC-Node已启动，正在BxC网络挖矿中...");
-					} else{
-    					$("#status_msg").html("BxC-Node 没有启用！");
+				setTimeout(function() {
+					// 第一次检测需要确定status信息以及开关状态
+					var bxc_status = dbus_read('bxc_status');
+					if (bxc_status == "running") {
+						document.getElementById("switch").checked=true;
+						$("#status_msg").html("BonusCloud-Node已启动，正在运行中...")
+					} else {
+						document.getElementById("switch").checked=false;
+						$("#status_msg").html("BonusCloud-Node 没有启用！")
 					}
-				}, 4000);
+
+					// 一直检测BxC-Node运行情况
+					var intervalCheck = setInterval(function(){
+						bxc_option("status");
+						var bxc_status = dbus_read('bxc_status');
+						console.log('bxc_check', bxc_status);
+						if(bxc_status == "running"){
+	    					$("#status_msg").html("BonusCloud-Node已启动，正在运行中...");
+						} else{
+	    					$("#status_msg").html("BonusCloud-Node 没有启用！");
+						}
+					}, 4000);
+
+				}, 3000);
 			}
 			
 			function bxc_option(action) {
@@ -143,21 +153,19 @@
 				if(document.getElementById("switch").checked){
 					$('#switch').prop('checked', true);
 					$("#switch_msg_show").show();
-    				$("#switch_msg").html("BxC-Node 开始启动...");
+    				$("#switch_msg").html("BonusCloud-Node 开始启动...");
 					bxc_option("start");
-					var tryTime = 20;
+					var tryTime = 30;
 					var interval = setInterval(function(){
 						console.log('enable', tryTime, dbus_read('bxc_status'));
 						tryTime--;
 						if(dbus_read("bxc_status") == "running"){
-	    					//$("#switch_msg").html("BxC-Node启动成功，进入BxC网络开始挖矿...");
 	    					$("#switch_msg_show").hide();
 							$('#switch').prop('disabled', false);
 							clearInterval(interval);
 						} else if (!tryTime) {
 							$('#switch').prop('checked', false);
 							$('#switch').prop('disabled', false);
-	    					//$("#switch_msg").html("BxC-Node 启动失败。");
 	    					$("#switch_msg_show").hide();
 						}
 						if (!tryTime) {
@@ -167,21 +175,18 @@
 				} else {
 					$('#switch').prop('checked', false);
 					$("#switch_msg_show").show();
-    				$("#switch_msg").html("开始停止BxC-Node程序...");
+    				$("#switch_msg").html("开始停止BonusCloud-Node程序...");
 					bxc_option("stop");
 					var tryTime = 60;
 					var interval = setInterval(function(){
 						console.log('disable', tryTime, dbus_read('bxc_status'));
 						tryTime--;
 						if(dbus_read("bxc_status") == "stoped"){
-							$("#switch_msg").html("BxC-Node成功退出，退出后需等待1分钟后才能重新启动");
-	    					//$("#switch_msg_show").hide();
-							//$('#switch').prop('disabled', false);
-							//clearInterval(interval);
+							$("#switch_msg").html("BonusCloud-Node成功退出，退出后需等待1分钟后才能重新启动");
 						} else if (!tryTime) {
 							$('#switch').prop('checked', true);
 							$('#switch').prop('disabled', false);
-							$("#switch_msg").html("BxC-Node 退出失败。");
+							$("#switch_msg").html("BonusCloud-Node 退出失败。");
 							clearInterval(interval);
 	    					//$("#switch_msg_show").hide();
 						}
@@ -226,10 +231,10 @@
 
 			function bxc_update(){
 	    		bxc_option("update");
-	    		showLoading(25);
+	    		showLoading(60);
 				setTimeout(function() {
 					location.reload();
-				}, 25000);
+				}, 60000);
 			}
 
 			function dbus_write(key, value) {
@@ -269,7 +274,6 @@
 		<div id="TopBanner"></div>
 		<div id="Loading" class="popup_bg"></div>
 		<iframe name="hidden_frame" id="hidden_frame" src="" width="0" height="0" frameborder="0"></iframe>
-		<!-- <form method="post" name="form" target="hidden_frame"> -->
 		<div>
 			<input type="hidden" name="current_page" value="Module_bxc.asp"/>
 			<input type="hidden" name="next_page" value="Module_bxc.asp"/>
@@ -298,18 +302,10 @@
 										<tr>
 											<td bgcolor="#4D595D" colspan="3" valign="top">
 												<div>&nbsp;</div>
-												<div style="float:left;" class="formfonttitle">BxC Node</div>
+												<div style="float:left;" class="formfonttitle">BonusCloud-Node</div>
 												<div style="float:right; width:15px; height:25px;margin-top:10px"><img id="return_btn" onclick="reload_Soft_Center();" align="right" style="cursor:pointer;position:absolute;margin-left:-30px;margin-top:-25px;" title="返回软件中心" src="/images/backprev.png" onMouseOver="this.src='/images/backprevclick.png'" onMouseOut="this.src='/images/backprev.png'"></img></div>
 												<div style="margin-left:5px;margin-top:10px;margin-bottom:10px"><img src="/images/New_ui/export/line_export.png"></div>
-												<div class="formfontdesc" style="padding-top:5px;margin-top:0px;float: left;">
-													<li>
-														<i>说明：</i>
-														本插件是以<a href="http://bonuscloud.io" target="_blank"><em><u>BxC币</u></em></a>为回报的网络闲置资源共享工具。设备通过<a href="http://bonuscloud.io" target="_blank"><em><u>邀请码</u></em></a>进行绑定后，即可开启挖矿模式
-													</li>
-												</div>
-												<br/>											
-												<br/>											
-
+												<br/>													
 												<div id="bxc_bound" style="display: ''">
 													<div id="bound_warning" style="display: none;background-color:#445053">
 								 						<div id="bound_msg" style="padding:10px;width:95%;font-size:12px;">
@@ -345,11 +341,11 @@
 													<table style="margin:10px 0px 0px 0px;" width="100%" border="1" align="center" cellpadding="4" cellspacing="0" bordercolor="#6b8fa3" class="FormTable" id="routing_table">
 														<thead>
 														<tr>
-															<td colspan="2">运行控制</td>
+															<td colspan="2">服务管理</td>
 														</tr>
 														</thead>
 														<tr>
-															<th>开启挖矿模式</th>
+															<th>运行控制</th>
 															<td colspan="2">
 																<div class="switch_field" style="display:table-cell;float: left;">
 																	<label for="switch">
@@ -437,7 +433,6 @@
 					</td>
 				</tr>
 			</table>
-		<!-- </form> -->
 		</div>
 		<div id="footer"></div>
     </body>
