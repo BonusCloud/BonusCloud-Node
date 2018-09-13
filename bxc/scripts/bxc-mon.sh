@@ -59,27 +59,6 @@ check_ext_net(){
 	fi
 }
 
-check_int_net(){
-	intf_exist=`ifconfig $BXC_INTF > /dev/null 2>&1;echo $?`
-	if [ $intf_exist -eq 0 ];then
-		gw=`ip addr show $BXC_INTF | grep inet6 | awk '{print $2}' | awk -F: '{print $1":"$2":"$3":"$4":"$5":"$6":"$7":1"}'`
-		check_gw=`echo $gw | grep -o ":" | grep -c ":"`
-		if [ $check_gw -eq 7 ];then
-			logdebug "int-network gw addr: $gw"
-			icmp=`ping6 -q -W 1 -c 3 $gw > /dev/null 2>&1;echo $?`
-			if [ $icmp -eq 0 ];then
-				logdebug "int-network icmp6 success: ping6 -q -W 1 -c 3 $gw"
-			else
-				logerr "int-network icmp6 faild: ping6 -q -W 1 -c 3 $gw"
-			fi
-		else
-			logerr "get int-network gw addr faild"
-		fi
-	else
-		logerr "interface $BXC_INTF not exist"
-	fi
-}
-
 check_iptables() {
 	# enable ifconfig ipv6
 	IPV6=`cat /proc/sys/net/ipv6/conf/all/disable_ipv6`
@@ -229,6 +208,5 @@ check_iptables() {
 check_iptables
 check_pid
 check_ext_net
-check_int_net
 
 exit 0
