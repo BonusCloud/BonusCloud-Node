@@ -76,7 +76,7 @@ if [ $md5_exist -eq 0 ];then
 	echo_date 校验安装包...
 	if [ -f /tmp/bxc.tar.gz ];then
 		local_md5=`md5sum /tmp/bxc.tar.gz | awk '{print $1}'`
-		remote_md5=`curl -s -m 3 "http://bc-git.linkedsee.com/api/v4/projects/14/repository/files/md5.txt/raw?ref=master" | awk '{print $1}'`
+		remote_md5=`curl -s -m 3 "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/md5.txt" | awk '{print $1}'`
 		check_remote=`echo $remote_md5 | wc -c`
 		if [ $check_remote -eq 33 ];then
 			if [ "$local_md5"x != "$remote_md5"x ];then
