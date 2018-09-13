@@ -110,6 +110,13 @@
 					document.getElementById("bxc_start_onboot")[1].selected=true;
 				}
 
+				var bxc_log_lev = dbus_read("bxc_log_level")
+				if (bxc_log_lev == "debug") {
+					document.getElementById("bxc_log")[1].selected=true;
+				} else {
+					document.getElementById("bxc_log")[0].selected=true;
+				}
+
 				setTimeout(function() {
 					// 第一次检测需要确定status信息以及开关状态
 					var bxc_status = dbus_read('bxc_status');
@@ -204,6 +211,14 @@
 					bxc_option("booton");
 				} else {
 					bxc_option("bootoff");
+				}
+			}
+
+			function bxc_switch_log() {
+				if(document.getElementById("bxc_log")[0].selected){
+					bxc_option("errorlog");
+				} else {
+					bxc_option("debuglog");
 				}
 			}
 
@@ -403,7 +418,7 @@
 														</tr>
 														<thead>
 														<tr>
-															<td colspan="4">启动设置</td>
+															<td colspan="4">运行设置</td>
 														</tr>
 														</thead>
 														<tr>
@@ -412,6 +427,15 @@
 																<select id="bxc_start_onboot" name="bxc_start_onboot" class="input_option" onchange="bxc_switch_onboot()" >
 																	<option value="1">是</option>
 																	<option value="0">否</option>
+																</select>
+															</td>
+														</tr>
+														<tr>
+														    <th width="35%">日志打印</th>
+															<td>
+																<select id="bxc_log" name="bxc_log" class="input_option" onchange="bxc_switch_log()" >
+																	<option value="1">ERROR</option>
+																	<option value="0">DEBUG</option>
 																</select>
 															</td>
 														</tr>

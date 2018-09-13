@@ -29,22 +29,22 @@ pkg_install() {
 	do
 		pkg_prefix=`echo "$pkg" | awk -F_ '{print $1}'`
 		
-		# 本地安装
+		# 网络安装
 		pkg_exist=`opkg list-installed | grep "$pkg_prefix" > /dev/null 2>&1;echo $?`
 		if [ $pkg_exist -ne 0 ];then
-			echo_date 系统未检测到"$pkg"，开始本地安装...
-			/opt/bin/opkg install "/koolshare/bxc/lib/$pkg" > /dev/null 2>&1
+			echo_date 通过opkg安装"$pkg"...
+			opkg update > /dev/null 2>&1
+			opkg install "$pkg_prefix" > /dev/null 2>&1
 		else
 			echo_date 系统已安装"$pkg"
 			continue
 		fi
 
-		# 网络安装
+		# 本地安装
 		pkg_exist=`opkg list-installed | grep "$pkg_prefix" > /dev/null 2>&1;echo $?`
 		if [ $pkg_exist -ne 0 ];then
-			echo_date "$pkg"本地安装失败，尝试通过opkg网络安装...
-			opkg update > /dev/null 2>&1
-			opkg install "$pkg_prefix" > /dev/null 2>&1
+			echo_date opkg网络安装"$pkg"失败，尝试本地安装...
+			/opt/bin/opkg install "/koolshare/bxc/lib/$pkg" > /dev/null 2>&1
 		fi
 
 		# 检测
@@ -70,12 +70,35 @@ case $(uname -m) in
 	;;
 esac
 
+# 校验下载文件
+md5_exist=`which md5sum > /dev/null 2>&1;echo $?`
+if [ $md5_exist -eq 0 ];then
+	echo_date 校验安装包...
+	if [ -f /tmp/bxc.tar.gz ];then
+		local_md5=`md5sum /tmp/bxc.tar.gz | awk '{print $1}'`
+		remote_md5=`curl -s -m 3 "http://bc-git.linkedsee.com/api/v4/projects/14/repository/files/md5.txt/raw?ref=master" | awk '{print $1}'`
+		check_remote=`echo $remote_md5 | wc -c`
+		if [ $check_remote -eq 33 ];then
+			if [ "$local_md5"x != "$remote_md5"x ];then
+				echo_date 安装包MD5校验失败: 本地-"$local_md5"，发布-"$remote_md5"，请重新下载安装包，退出安装！
+				exit 1
+			else
+				echo_date 安装包校验成功！
+			fi
+		else
+			echo_date 远程信息获取失败，跳过校验，您也可以手动比对本地安装包md5值与github中的md5。
+		fi
+	else
+		echo_date 未检测到包文件/tmp/bxc.tar.gz，跳过校验
+ 	fi
+fi
+
 # 获取上联口MAC地址
 wan_mac=`nvram get wan0_hwaddr`
 if [ "$wan_mac"x != ""x ]; then
 	echo_date 设备MAC地址为：$wan_mac
 else
-	echo_date 从NVRAM获取MAC地址失败（建议设备恢复出厂设置后重新安装），退出安装！
+	echo_date 从NVRAM获取MAC地址失败，建议设备恢复出厂设置后重新安装，退出安装！
 	exit 1
 fi
 
@@ -117,6 +140,8 @@ echo_date 设置环境变量...
 CUR_VERSION=`cat /koolshare/bxc/version`
 dbus set bxc_local_version="$CUR_VERSION"
 echo_date 安装版本信息："$CUR_VERSION"
+source /koolshare/bxc/bxc.config 
+dbus set bxc_log_level="$LOG_LEVEL"
 dbus set bxc_wan_mac="$wan_mac"
 dbus set softcenter_module_bxc_install="4"
 dbus set softcenter_module_bxc_version="$CUR_VERSION"
@@ -133,6 +158,8 @@ pkg_install
 echo_date 运行数据初始化...
 /koolshare/scripts/bxc.sh status
 /koolshare/scripts/bxc.sh booton
+/koolshare/scripts/bxc.sh cronon
+
 
 # delete install tar
 rm -rf /tmp/bxc* >/dev/null 2>&1

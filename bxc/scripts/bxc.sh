@@ -18,6 +18,7 @@ BXC_SSL_CA="/tmp/etc/bxc-network/ca.crt"
 BXC_SSL_CRT="/tmp/etc/bxc-network/client.crt"
 BXC_SSL_KEY="/tmp/etc/bxc-network/client.key"
 
+BXC_BOUND_URL="https://117.48.224.43/idb/dev"
 BXC_UPDATE_URL="https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/bxc.tar.gz"
 
 
@@ -25,18 +26,19 @@ source /koolshare/scripts/base.sh
 source $BXC_CONF
 
 logdebug(){
-	if [ "$LOG_LEVEL"x == "debug"x ];then
-		echo "[$(TZ=UTC-8 date -R +%Y-%m-%d\ %X)] INFO: $1 " >> /tmp/log-bxc
-	fi
+  if [ "$LOG_LEVEL"x == "debug"x ];then
+    logger -c "INFO: $1" -t bonuscloud-node > /dev/null 2>&1
+  fi
 }
 
 logerr(){
-	if [ "$LOG_LEVEL"x == "error"x ] || [ "$LOG_LEVEL"x == "debug"x ];then
-		echo "[$(TZ=UTC-8 date -R +%Y-%m-%d\ %X)] ERROR: $1 " >> /tmp/log-bxc
-	fi
+  if [ "$LOG_LEVEL"x == "error"x ] || [ "$LOG_LEVEL"x == "debug"x ];then
+    logger -c "ERROR: $1" -t bonuscloud-node > /dev/null 2>&1
+  fi
 }
 
 init(){
+	rm -f /tmp/log-bxc > /dev/null 2>&1
 	opkg_install
 	pkg_install 
 	ipv6_enable
@@ -106,6 +108,22 @@ vpn_env(){
 		logerr "device /dev/shm not exist, exit."
 		exit 1
 	fi
+
+	# user nobody
+	user_exist=`grep -e "^nobody:" /etc/passwd > /dev/null 2>&1;echo $?`
+	if [ $user_exist -ne 0 ];then
+		logdebug "append /etc/passwd 'nobody:x:65534:65534:nobody:/dev/null:/dev/null'"
+		echo "nobody:x:65534:65534:nobody:/dev/null:/dev/null" >> /etc/passwd
+	else
+		logdebug "nobody exist /etc/passwd: `grep -e '^nobody:' /etc/passwd`"
+	fi
+	group_exist=`grep -e "^nobody:" /etc/group > /dev/null 2>&1;echo $?`
+	if [ $group_exist -ne 0 ];then
+		logdebug "append /etc/group 'nobody:x:65534:'"
+		echo "nobody:x:65534:" >> /etc/group
+	else
+		logdebug "nobody exist /etc/group: `grep -e '^nobody:' /etc/group`"
+	fi
 }
 
 ipv6_enable() {
@@ -127,102 +145,131 @@ ipv6_enable() {
 	# acl tcp 8901
 	acl_exist=`ip6tables -C INPUT -p tcp --dport 8901 -j ACCEPT -i tun0 > /dev/null 2>&1;echo $?`
 	if [ $acl_exist -ne 0 ];then
-		logdebug "add: ip6tables -A INPUT -p tcp --dport 8901 -j ACCEPT -i tun0"
-		ip6tables -A INPUT -p tcp --dport 8901 -j ACCEPT -i tun0 > /dev/null 2>&1
+		logdebug "add: ip6tables -I INPUT -p tcp --dport 8901 -j ACCEPT -i tun0"
+		ip6tables -I INPUT -p tcp --dport 8901 -j ACCEPT -i tun0 > /dev/null 2>&1
 		check_exist=`ip6tables -C INPUT -p tcp --dport 8901 -j ACCEPT -i tun0 > /dev/null 2>&1;echo $?`
 		if [ $check_exist -ne 0 ];then
-			logerr "failed add: ip6tables -A INPUT -p tcp --dport 8901 -j ACCEPT -i tun0"
+			logerr "failed add: ip6tables -I INPUT -p tcp --dport 8901 -j ACCEPT -i tun0"
 		else
-			logdebug "success add: ip6tables -A INPUT -p tcp --dport 8901 -j ACCEPT -i tun0"
+			logdebug "success add: ip6tables -I INPUT -p tcp --dport 8901 -j ACCEPT -i tun0"
 		fi
 	else
-		logdebug "acl exist: ip6tables -A INPUT -p tcp --dport 8901 -j ACCEPT -i tun0 "
+		logdebug "acl exist: ip6tables -I INPUT -p tcp --dport 8901 -j ACCEPT -i tun0 "
 	fi
 
 	acl_exist=`ip6tables -C OUTPUT -p tcp --sport 8901 -j ACCEPT > /dev/null 2>&1;echo $?`
 	if [ $acl_exist -ne 0 ];then
-		logdebug "add: ip6tables -A OUTPUT -p tcp --sport 8901 -j ACCEPT"
-		ip6tables -A OUTPUT -p tcp --sport 8901 -j ACCEPT > /dev/null 2>&1
+		logdebug "add: ip6tables -I OUTPUT -p tcp --sport 8901 -j ACCEPT"
+		ip6tables -I OUTPUT -p tcp --sport 8901 -j ACCEPT > /dev/null 2>&1
 		check_exist=`ip6tables -C OUTPUT -p tcp --sport 8901 -j ACCEPT > /dev/null 2>&1;echo $?`
 		if [ $check_exist -ne 0 ];then
-			logerr "failed add: ip6tables -A OUTPUT -p tcp --sport 8901 -j ACCEPT"
+			logerr "failed add: ip6tables -I OUTPUT -p tcp --sport 8901 -j ACCEPT"
 		else
-			logdebug "success add: ip6tables -A OUTPUT -p tcp --sport 8901 -j ACCEPT"
+			logdebug "success add: ip6tables -I OUTPUT -p tcp --sport 8901 -j ACCEPT"
 		fi
 	else
-		logdebug "acl exist: ip6tables -A OUTPUT -p tcp --sport 8901 -j ACCEPT"
+		logdebug "acl exist: ip6tables -I OUTPUT -p tcp --sport 8901 -j ACCEPT"
 	fi
 
 	# acl icmpv6
 	acl_exist=`ip6tables -C INPUT -p icmpv6 -j ACCEPT -i tun0 > /dev/null 2>&1;echo $?`
 	if [ $acl_exist -ne 0 ];then
-		logdebug "add: ip6tables -A INPUT -p icmpv6 -j ACCEPT -i tun0"
-		ip6tables -A INPUT -p icmpv6 -j ACCEPT -i tun0 > /dev/null 2>&1
+		logdebug "add: ip6tables -I INPUT -p icmpv6 -j ACCEPT -i tun0"
+		ip6tables -I INPUT -p icmpv6 -j ACCEPT -i tun0 > /dev/null 2>&1
 		check_exist=`ip6tables -C INPUT -p icmpv6 -j ACCEPT -i tun0 > /dev/null 2>&1;echo $?`
 		if [ $check_exist -ne 0 ];then
-			logerr "failed add: ip6tables -A INPUT -p icmpv6 -j ACCEPT -i tun0"
+			logerr "failed add: ip6tables -I INPUT -p icmpv6 -j ACCEPT -i tun0"
 		else
-			logdebug "success add: ip6tables -A INPUT -p icmpv6 -j ACCEPT -i tun0"
+			logdebug "success add: ip6tables -I INPUT -p icmpv6 -j ACCEPT -i tun0"
 		fi
 	else
-		logdebug "acl exist: ip6tables -A INPUT -p icmpv6 -j ACCEPT -i tun0"
+		logdebug "acl exist: ip6tables -I INPUT -p icmpv6 -j ACCEPT -i tun0"
 	fi
 
 	acl_exist=`ip6tables -C OUTPUT -p icmpv6 -j ACCEPT > /dev/null 2>&1;echo $?`
 	if [ $acl_exist -ne 0 ];then
-		logdebug "add: ip6tables -A OUTPUT -p icmpv6 -j ACCEPT"
-		ip6tables -A OUTPUT -p icmpv6 -j ACCEPT > /dev/null 2>&1
+		logdebug "add: ip6tables -I OUTPUT -p icmpv6 -j ACCEPT"
+		ip6tables -I OUTPUT -p icmpv6 -j ACCEPT > /dev/null 2>&1
 		check_exist=`ip6tables -C OUTPUT -p icmpv6 -j ACCEPT > /dev/null 2>&1;echo $?`
 		if [ $check_exist -ne 0 ];then
-			logerr "failed add: ip6tables -A OUTPUT -p icmpv6 -j ACCEPT"
+			logerr "failed add: ip6tables -I OUTPUT -p icmpv6 -j ACCEPT"
 		else
-			logdebug "success add: ip6tables -A OUTPUT -p icmpv6 -j ACCEPT"
+			logdebug "success add: ip6tables -I OUTPUT -p icmpv6 -j ACCEPT"
 		fi
 	else
-		logdebug "acl exist: ip6tables -A OUTPUT -p icmpv6 -j ACCEPT"
+		logdebug "acl exist: ip6tables -I OUTPUT -p icmpv6 -j ACCEPT"
 	fi
 	
 	# acl udp
 	acl_exist=`ip6tables -C INPUT -p udp -j ACCEPT -i tun0 > /dev/null 2>&1;echo $?`
 	if [ $acl_exist -ne 0 ];then
-		logdebug "add: ip6tables -A INPUT -p udp -j ACCEPT -i tun0"
-		ip6tables -A INPUT -p udp -j ACCEPT -i tun0 > /dev/null 2>&1
+		logdebug "add: ip6tables -I INPUT -p udp -j ACCEPT -i tun0"
+		ip6tables -I INPUT -p udp -j ACCEPT -i tun0 > /dev/null 2>&1
 		check_exist=`ip6tables -C INPUT -p udp -j ACCEPT -i tun0 > /dev/null 2>&1;echo $?`
 		if [ $check_exist -ne 0 ];then
-			logerr "failed add: ip6tables -A INPUT -p udp -j ACCEPT -i tun0"
+			logerr "failed add: ip6tables -I INPUT -p udp -j ACCEPT -i tun0"
 		else
-			logdebug "success add: ip6tables -A INPUT -p udp -j ACCEPT -i tun0"
+			logdebug "success add: ip6tables -I INPUT -p udp -j ACCEPT -i tun0"
 		fi
 	else
-		logdebug "acl exist: ip6tables -A INPUT -p udp -j ACCEPT -i tun0"
+		logdebug "acl exist: ip6tables -I INPUT -p udp -j ACCEPT -i tun0"
 	fi
 
 	acl_exist=`ip6tables -C INPUT -p udp -j ACCEPT -i lo > /dev/null 2>&1;echo $?`
 	if [ $acl_exist -ne 0 ];then
-		logdebug "add: ip6tables -A INPUT -p udp -j ACCEPT -i lo"
-		ip6tables -A INPUT -p udp -j ACCEPT -i lo > /dev/null 2>&1
+		logdebug "add: ip6tables -I INPUT -p udp -j ACCEPT -i lo"
+		ip6tables -I INPUT -p udp -j ACCEPT -i lo > /dev/null 2>&1
 		check_exist=`ip6tables -C INPUT -p udp -j ACCEPT -i lo > /dev/null 2>&1;echo $?`
 		if [ $check_exist -ne 0 ];then
-			logerr "failed add: ip6tables -A INPUT -p udp -j ACCEPT -i lo"
+			logerr "failed add: ip6tables -I INPUT -p udp -j ACCEPT -i lo"
 		else
-			logdebug "success add: ip6tables -A INPUT -p udp -j ACCEPT -i lo"
+			logdebug "success add: ip6tables -I INPUT -p udp -j ACCEPT -i lo"
 		fi
 	else
-		logdebug "acl exist: ip6tables -A INPUT -p udp -j ACCEPT -i lo"
+		logdebug "acl exist: ip6tables -I INPUT -p udp -j ACCEPT -i lo"
 	fi
 
 	acl_exist=`ip6tables -C OUTPUT -p udp -j ACCEPT > /dev/null 2>&1;echo $?`
 	if [ $acl_exist -ne 0 ];then
-		logdebug "add: ip6tables -A OUTPUT -p udp -j ACCEPT"
-		ip6tables -A OUTPUT -p udp -j ACCEPT > /dev/null 2>&1
+		logdebug "add: ip6tables -I OUTPUT -p udp -j ACCEPT"
+		ip6tables -I OUTPUT -p udp -j ACCEPT > /dev/null 2>&1
 		check_exist=`ip6tables -C OUTPUT -p udp -j ACCEPT > /dev/null 2>&1;echo $?`
 		if [ $check_exist -ne 0 ];then
-			logerr "failed add: ip6tables -A OUTPUT -p udp -j ACCEPT"
+			logerr "failed add: ip6tables -I OUTPUT -p udp -j ACCEPT"
 		else
-			logdebug "success add: ip6tables -A OUTPUT -p udp -j ACCEPT"
+			logdebug "success add: ip6tables -I OUTPUT -p udp -j ACCEPT"
 		fi
 	else
-		logdebug "acl exist: ip6tables -A OUTPUT -p udp -j ACCEPT"
+		logdebug "acl exist: ip6tables -I OUTPUT -p udp -j ACCEPT"
+	fi
+
+	# ipv4 acl tcp 80,443
+	acl_exist=`iptables -C INPUT -p tcp --match multiport --sports 80,443,8080 -j ACCEPT > /dev/null 2>&1;echo $?`
+	if [ $acl_exist -ne 0 ];then
+		logdebug "add: iptables -I INPUT -p tcp --match multiport --sports 80,443,8080 -j ACCEPT"
+		iptables -I INPUT -p tcp --match multiport --sports 80,443,8080 -j ACCEPT > /dev/null 2>&1
+		check_exist=`iptables -C INPUT -p tcp --match multiport --sports 80,443,8080 -j ACCEPT > /dev/null 2>&1;echo $?`
+		if [ $check_exist -ne 0 ];then
+			logerr "failed add: iptables -I INPUT -p tcp --match multiport --sports 80,443,8080 -j ACCEPT"
+		else
+			logdebug "success add: iptables -I INPUT -p tcp --match multiport --sports 80,443,8080 -j ACCEPT"
+		fi
+	else
+		logdebug "acl exist: iptables -I INPUT -p tcp --match multiport --sports 80,443,8080 -j ACCEPT"
+	fi
+
+	acl_exist=`iptables -C OUTPUT -p tcp --match multiport --dports 80,443,8080 -j ACCEPT > /dev/null 2>&1;echo $?`
+	if [ $acl_exist -ne 0 ];then
+		logdebug "add: iptables -I OUTPUT -p tcp --match multiport --dports 80,443,8080 -j ACCEPT"
+		iptables -I OUTPUT -p tcp --match multiport --dports 80,443,8080 -j ACCEPT > /dev/null 2>&1
+		check_exist=`iptables -C OUTPUT -p tcp --match multiport --dports 80,443,8080 -j ACCEPT > /dev/null 2>&1;echo $?`
+		if [ $check_exist -ne 0 ];then
+			logerr "failed add: iptables -I OUTPUT -p tcp --match multiport --dports 80,443,8080 -j ACCEPT"
+		else
+			logdebug "success add: iptables -I OUTPUT -p tcp --match multiport --dports 80,443,8080 -j ACCEPT"
+		fi
+	else
+		logdebug "acl exist: iptables -I OUTPUT -p tcp --match multiport --dports 80,443,8080 -j ACCEPT"
 	fi
 }
 
@@ -278,6 +325,7 @@ pkg_install() {
 	done
 }
 
+
 status_bxc(){
 	network_status=`ps | grep "bxc-network" | grep -v grep > /dev/null 2>&1; echo $?`
 	worker_status=`ps | grep "bxc-worker" | grep -v grep > /dev/null 2>&1; echo $?`
@@ -325,11 +373,13 @@ bound_bxc(){
 	bcode=`dbus get bxc_input_bcode`
 	mac=`dbus get bxc_wan_mac`
 
-	curl -k -H "Content-Type: application/json" -d "{\"fcode\":\"$bcode\", \"mac_address\":\"$mac\"}" -w "$line\nstatus_code:"%{http_code}"\n" https://117.48.224.43/idb/dev > /koolshare/bxc/curl.res
+	curl -k -m 5 -H "Content-Type: application/json" -d "{\"fcode\":\"$bcode\", \"mac_address\":\"$mac\"}" -w "\nstatus_code:"%{http_code}"\n" $BXC_BOUND_URL > /koolshare/bxc/curl.res
+	logdebug "curl -k -H \"Content-Type: application/json\" -d \"{\"fcode\":\"$bcode\", \"mac_address\":\"$mac\"}\" -w \"\nstatus_code:\"%{http_code}\"\n\" $BXC_BOUND_URL"
 	curl_code=`grep 'status_code' /koolshare/bxc/curl.res | awk -F: '{print $2}'`
 	if [ -z $curl_code ];then
 		dbus set bxc_bound_status="服务端没有响应绑定请求，请稍候再试"
-		logdebug 'Server has no response code: curl -k -H "Content-Type: application/json" -d "{\"fcode\":\"$bcode\", \"mac_address\":\"$mac\"}" -w "$line\nstatus_code:"%{http_code}"\n" https://117.48.224.43/idb/dev > /koolshare/bxc/curl.res'
+		logerr 'bonud server has no response code, exit'
+		exit 1
 	elif [ "$curl_code"x == "200"x ];then
 		echo -e `cat /koolshare/bxc/curl.res | /koolshare/scripts/bxc-json.sh | egrep "\"Cert\",\"key\"" | awk -F\" '{print $6}' | sed 's/"//g'` > $BXC_SSL_KEY
 		echo -e `cat /koolshare/bxc/curl.res | /koolshare/scripts/bxc-json.sh | egrep "\"Cert\",\"cert\"" | awk -F\" '{print $6}' | sed 's/"//g'` > $BXC_SSL_CRT
@@ -354,11 +404,13 @@ bound_bxc(){
 	else
 		cat /koolshare/bxc/curl.res | /koolshare/scripts/bxc-json.sh | egrep '\["details"\]' > /dev/null
 		if [ $? -eq 0 ];then
-			fail_detail=`cat /koolshare/bxc/curl.res | /koolshare/scripts/bxc-json.sh | egrep '\["details"\]' | awk -F\" '{print $4}' | sed 's/"//g'`
+			fail_detail=`cat /koolshare/bxc/curl.res | /koolshare/scripts/bxc-json.sh | egrep '\["details"\]' | awk -F\" '{print $(NF-1)}'`
 			if [ "$fail_detail"x == "fcode used"x ];then
 				dbus set bxc_bound_status="邀请码已被使用"
 			elif [ "$fail_detail"x == "dev used"x ];then
 				dbus set bxc_bound_status="设备已被绑定"
+			elif [ "$fail_detail"x == "fcode invalid"x ];then
+				dbus set bxc_bound_status="无效的邀请码"
 			else
 				dbus set bxc_bound_status="$fail_detail"
 			fi
@@ -392,7 +444,38 @@ bootoff_bxc(){
     [ -L "/koolshare/init.d/S97bxc.sh" ] && logerr "BxC-Node start onboot disable failed"
     dbus set bxc_onboot="no"
 }
-
+log_err(){
+	if [ -f $BXC_CONF ];then
+		sed -i '/^LOG_LEVEL=/d' $BXC_CONF > /dev/null 2>&1
+		echo "LOG_LEVEL=\"error\"" >> $BXC_CONF
+		dbus set bxc_log_level="error"
+	else
+		logerr "$BXC_CONF not found, exit."
+		exit 1
+	fi
+}
+log_debug(){
+	if [ -f $BXC_CONF ];then
+		sed -i '/^LOG_LEVEL=/d' $BXC_CONF > /dev/null 2>&1
+		echo "LOG_LEVEL=\"debug\"" >> $BXC_CONF
+		dbus set bxc_log_level="debug"
+	else
+		logerr "$BXC_CONF not found, exit."
+		exit 1
+	fi
+}
+cron_add(){
+	cron_exist=`cru l | grep "/koolshare/scripts/bxc-mon.sh" > /dev/null 2>&1;echo $?`
+	if [ $cron_exist -ne 0 ];then
+		cru a BxcMon "*/10 * * * * /koolshare/scripts/bxc-mon.sh > /dev/null 2>&1"
+	fi
+}
+cron_del(){
+	cron_exist=`cru l | grep "/koolshare/scripts/bxc-mon.sh" > /dev/null 2>&1;echo $?`
+	if [ $cron_exist -eq 0 ];then
+		cru d BxcMon "*/10 * * * * /koolshare/scripts/bxc-mon.sh > /dev/null 2>&1"
+	fi
+}
 update_bxc(){
 	stop_bxc
 
@@ -416,6 +499,8 @@ update_bxc(){
 		dbus set bxc_local_version="$CUR_VERSION"
 		dbus set softcenter_module_bxc_version="$CUR_VERSION"
 		logdebug "Version infomation update:$CUR_VERSION"
+		source $BXC_CONF
+		dbus set bxc_log_level="$LOG_LEVEL"
 
 		rm -rf /tmp/bxc* >/dev/null 2>&1
 	else
@@ -424,7 +509,7 @@ update_bxc(){
 	fi
 }
 
-if [ -z $1 ];then
+if [ -z "$1" ];then
 	ACTION=`dbus get bxc_option`
 else
 	ACTION=$1
@@ -435,10 +520,12 @@ logdebug "bxc.sh $ACTION"
 case $ACTION in
 start)
 	init
+	cron_add
 	start_bxc
 	;;
 stop)
 	stop_bxc
+	cron_del
 	;;
 restart)
 	stop_bxc
@@ -455,6 +542,18 @@ booton)
 	;;
 bootoff)
 	bootoff_bxc
+	;;
+debuglog)
+	log_debug
+	;;
+errorlog)
+	log_err
+	;;
+cronon)
+	cron_add
+	;;
+cronoff)
+	cron_del
 	;;
 update)
 	update_bxc

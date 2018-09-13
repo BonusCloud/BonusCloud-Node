@@ -1,6 +1,6 @@
 #!/bin/sh
 
-dbus set bxc_option="stop" && /koolshare/scripts/bxc.sh
+/koolshare/scripts/bxc.sh stop
 
 dbus remove bxc_bcode
 dbus remove bxc_option
@@ -22,3 +22,4 @@ rm /koolshare/init.d/*bxc.sh
 rm -rf /koolshare/bxc
 rm /koolshare/scripts/uninstall_bxc.sh
 rm -fr /tmp/etc/bxc-network
+rm -fr /tmp/log-bxc

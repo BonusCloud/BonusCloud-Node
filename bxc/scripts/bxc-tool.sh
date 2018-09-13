@@ -1,5 +1,4 @@
 #!/bin/sh
-
 unset LD_LIBRARY_PATH
 unset LD_PRELOAD
 
@@ -7,13 +6,13 @@ source /koolshare/bxc/bxc.config
 
 logdebug(){
   if [ "$LOG_LEVEL"x == "debug"x ];then
-    echo "[$(TZ=UTC-8 date -R +%Y-%m-%d\ %X)] INFO: $1 " >> /tmp/log-bxc
+    logger -c "INFO: $1" -t bonuscloud-node > /dev/null 2>&1
   fi
 }
 
 logerr(){
   if [ "$LOG_LEVEL"x == "error"x ] || [ "$LOG_LEVEL"x == "debug"x ];then
-    echo "[$(TZ=UTC-8 date -R +%Y-%m-%d\ %X)] ERROR: $1 " >> /tmp/log-bxc
+    logger -c "ERROR: $1" -t bonuscloud-node > /dev/null 2>&1
   fi
 }
 
@@ -34,47 +33,47 @@ logdebug "Opkg package manager deployment..."
 DLOADER="ld-linux.so.3"
 URL=http://bin.entware.net/armv7sf-k2.6/installer
 
-cp -f /koolshare/bxc/lib/opkg/opkg /opt/bin/opkg > /dev/null 2>&1
+wget $URL/opkg -O /opt/bin/opkg > /dev/null 2>&1
 if [ ! -f /opt/bin/opkg ];then 
-  logdebug "local file /koolshare/bxc/lib/opkg/opkg copy faild, try remote install..."
-  wget $URL/opkg -O /opt/bin/opkg > /dev/null 2>&1
-  [ ! -f /opt/bin/opkg ] && logerr "/opt/bin/opkg download faild" && exit 1
+  logdebug "wget $URL/opkg faild, try copy /koolshare/bxc/lib/opkg/opkg ..."
+  cp -f /koolshare/bxc/lib/opkg/opkg /opt/bin/opkg > /dev/null 2>&1
+  [ ! -f /opt/bin/opkg ] && logerr "/opt/bin/opkg install faild" && exit 1
 fi
 chmod 755 /opt/bin/opkg > /dev/null 2>&1
 
-cp -f /koolshare/bxc/lib/opkg/opkg.conf /opt/etc/opkg.conf > /dev/null 2>&1
+wget $URL/opkg.conf -O /opt/etc/opkg.conf > /dev/null 2>&1
 if [ ! -f /opt/etc/opkg.conf ];then
-  logdebug "local file /koolshare/bxc/lib/opkg/opkg.conf faild, try remote install..."
-  wget $URL/opkg.conf -O /opt/etc/opkg.conf > /dev/null 2>&1
-  [ ! -f /opt/etc/opkg.conf ] && logerr "/opt/etc/opkg.conf download faild" && exit 1
+  logdebug "wget $URL/opkg.conf faild, try copy /koolshare/bxc/lib/opkg/opkg.conf ..."
+  cp -f /koolshare/bxc/lib/opkg/opkg.conf /opt/etc/opkg.conf > /dev/null 2>&1
+  [ ! -f /opt/etc/opkg.conf ] && logerr "/opt/etc/opkg.conf install faild" && exit 1
 fi
 
-cp -f /koolshare/bxc/lib/opkg/ld-2.23.so /opt/lib/ld-2.23.so > /dev/null 2>&1
+wget $URL/ld-2.23.so -O /opt/lib/ld-2.23.so > /dev/null 2>&1
 if [ ! -f /opt/lib/ld-2.23.so ];then
-  logdebug "local file /koolshare/bxc/lib/opkg/ld-2.23.so faild, try remote install..."
-  wget $URL/ld-2.23.so -O /opt/lib/ld-2.23.so > /dev/null 2>&1
+  logdebug "wget $URL/ld-2.23.so faild, try copy /koolshare/bxc/lib/opkg/ld-2.23.so ..."
+  cp -f /koolshare/bxc/lib/opkg/ld-2.23.so /opt/lib/ld-2.23.so > /dev/null 2>&1
   [ ! -f /opt/lib/ld-2.23.so ] && logerr "/opt/lib/ld-2.23.so download faild" && exit 1
 fi
 
-cp -f /koolshare/bxc/lib/opkg/libc-2.23.so /opt/lib/libc-2.23.so > /dev/null 2>&1
+wget $URL/libc-2.23.so -O /opt/lib/libc-2.23.so > /dev/null 2>&1
 if [ ! -f /opt/lib/libc-2.23.so ];then
-  logdebug "local file /koolshare/bxc/lib/opkg/libc-2.23.so faild, try remote install..."
-  wget $URL/libc-2.23.so -O /opt/lib/libc-2.23.so > /dev/null 2>&1
-  [ ! -f /opt/lib/libc-2.23.so ] && logerr "/opt/lib/libc-2.23.so download faild" && exit 1
+  logdebug "wget $URL/libc-2.23.so faild, try copy /koolshare/bxc/lib/opkg/libc-2.23.so ..."
+  cp -f /koolshare/bxc/lib/opkg/libc-2.23.so /opt/lib/libc-2.23.so > /dev/null 2>&1
+  [ ! -f /opt/lib/libc-2.23.so ] && logerr "/opt/lib/libc-2.23.so install faild" && exit 1
 fi
 
-cp -f /koolshare/bxc/lib/opkg/libgcc_s.so.1 /opt/lib/libgcc_s.so.1 > /dev/null 2>&1
+wget $URL/libgcc_s.so.1 -O /opt/lib/libgcc_s.so.1 > /dev/null 2>&1
 if [ ! -f /opt/lib/libgcc_s.so.1 ];then
-  logdebug "local file /koolshare/bxc/lib/opkg/libgcc_s.so.1 faild, try remote install..."
-  wget $URL/libgcc_s.so.1 -O /opt/lib/libgcc_s.so.1 > /dev/null 2>&1
-  [ ! -f /opt/lib/libgcc_s.so.1 ] && logerr "/opt/lib/libgcc_s.so.1 download faild" && exit 1
+  logdebug "wget $URL/libgcc_s.so.1 faild, try copy /koolshare/bxc/lib/opkg/libgcc_s.so.1 ..."
+  cp -f /koolshare/bxc/lib/opkg/libgcc_s.so.1 /opt/lib/libgcc_s.so.1 > /dev/null 2>&1
+  [ ! -f /opt/lib/libgcc_s.so.1 ] && logerr "/opt/lib/libgcc_s.so.1 install faild" && exit 1
 fi
 
-cp -f /koolshare/bxc/lib/opkg/libpthread-2.23.so /opt/lib/libpthread-2.23.so > /dev/null 2>&1
+wget $URL/libpthread-2.23.so -O /opt/lib/libpthread-2.23.so > /dev/null 2>&1
 if [ ! -f /opt/lib/libpthread-2.23.so ];then
-  logdebug "local file /koolshare/bxc/lib/opkg/libpthread-2.23.so faild, try remote install..."
-  wget $URL/libpthread-2.23.so -O /opt/lib/libpthread-2.23.so > /dev/null 2>&1
-  [ ! -f /opt/lib/libpthread-2.23.so ] && logerr "/opt/lib/libpthread-2.23.so download faild" && exit 1
+  logdebug "wget $URL/libpthread-2.23.so faild, try copy /koolshare/bxc/lib/opkg/libpthread-2.23.so ..."
+  cp -f /koolshare/bxc/lib/opkg/libpthread-2.23.so /opt/lib/libpthread-2.23.so > /dev/null 2>&1
+  [ ! -f /opt/lib/libpthread-2.23.so ] && logerr "/opt/lib/libpthread-2.23.so install faild" && exit 1
 fi
 
 cd /opt/lib
@@ -84,16 +83,16 @@ ln -s libc-2.23.so libc.so.6
 ln -s libpthread-2.23.so libpthread.so.0
 
 logdebug "Basic packages installation..."
-for pkg in `cat /koolshare/bxc/lib/opkg/pkg/install_order`
-do
-  logdebug "/opt/bin/opkg install /koolshare/bxc/lib/opkg/pkg/$pkg"
-	/opt/bin/opkg install /koolshare/bxc/lib/opkg/pkg/$pkg > /dev/null 2>&1
-done
+/opt/bin/opkg update > /dev/null 2>&1
+/opt/bin/opkg install entware-opt > /dev/null 2>&1
 pkg_exist=`/opt/bin/opkg list-installed | grep entware-opt > /dev/null 2>&1;echo $?`
 if [ $pkg_exist -ne 0 ];then
-  logdebug "entware-opt local install faild, try opkg remote install ..."
-	/opt/bin/opkg update > /dev/null 2>&1
-	/opt/bin/opkg install entware-opt > /dev/null 2>&1
+  logdebug "entware-opt remote install faild, try local install ..."
+  for pkg in `cat /koolshare/bxc/lib/opkg/pkg/install_order`
+  do
+    logdebug "/opt/bin/opkg install /koolshare/bxc/lib/opkg/pkg/$pkg"
+    /opt/bin/opkg install /koolshare/bxc/lib/opkg/pkg/$pkg > /dev/null 2>&1
+  done
 fi
 pkg_exist=`/opt/bin/opkg list-installed | grep entware-opt > /dev/null 2>&1;echo $?`
 if [ $pkg_exist -ne 0 ];then
