@@ -505,7 +505,7 @@
 														</tr>
 			 										</table>
 												</div>
-												<div id="onlineTime" style="display: none;position: absolute; visibility: visible; z-index: 500; top: 480px; background-image: none;overflow: auto;width: 100%;height: 40em;background-color: black">
+												<div id="onlineTime" style="display: none;position: absolute; visibility: visible; z-index: 500; top: 480px; background-image: none;overflow: auto;width: 100%;height: 40em;background-color: #475a5f">
 													<table style="background-color: #CCCCCC;width: 100%;">
 														<tr>
 															<td>
