@@ -243,6 +243,66 @@
 			        }
 			    });
 			}
+			/*请求服务器在线时间*/
+			function get_online_time() {
+
+				var bxc_bcode=dbus_read("bxc_bcode");
+				
+				$.ajax({
+					url:'http://183.2.168.127:8080/fcode/'+bxc_bcode,
+					type:'GET',
+					//dataType: "jsonp",
+					success:function (res) {
+						if (res) {
+							/*
+							ret_Arr=function (res) {
+								// 解析table
+								function parseDom(arg) {
+　　 								var objE = document.createElement("div");
+　　 								objE.innerHTML = arg;
+　　 								return objE.childNodes;
+								};
+								var obj=parseDom(res);
+								return getTables(obj);
+								function getTables(obj){
+									var tables = []
+									obj.forEach(function(tb){
+										var table = [];
+										tb.querySelectorAll('tr').forEach(function(tr){
+											var line = [];
+											tr.querySelectorAll('th, td').forEach(function(td){
+												line.push(td.innerText);
+											});
+											table.push(line);
+										});
+										tables.push(table);
+									});
+									return tables;
+								}
+							};*/
+							var top=document.getElementById('onlineTime');
+							var sec=parseDom(res)[0];
+							top.appendChild(sec);
+							top.style.display='block'
+
+							function parseDom(arg) {
+　　 								var objE = document.createElement("div");
+　　 								objE.innerHTML = arg;
+　　 								return objE.childNodes
+							};
+						} else {
+							alert('获取失败');
+						}
+
+					}
+				});
+
+			}
+			function close_msg() {
+				// body...
+				var top=document.getElementById('onlineTime');
+				top.style.display='none';
+			}
 
 			function bxc_update(){
 	    		bxc_option("update");
@@ -406,6 +466,7 @@
 																<a>
 																	<span id="bxc_bcode_show" >未知</span>
 																</a>
+																<button class="button_gen" style="float: right;" onclick="get_online_time()">在线时间</button>
 															</td>
 														</tr>
 														<tr>
@@ -440,6 +501,18 @@
 															</td>
 														</tr>
 			 										</table>
+												</div>
+												<div id="onlineTime" style="display: none;position: absolute; visibility: visible; z-index: 500; top: 480px; background-image: none;overflow: auto;width: 100%;height: 40em;background-color: black">
+													<table style="background-color: #CCCCCC;width: 100%;">
+														<tr>
+															<td>
+																<b>在线时间</b>
+															</td>
+															<td align="right">
+																<a href="javascript:close_msg();">关闭</a>
+															</td>
+														</tr>
+													</table>
 												</div>
 												<div style="margin-left:5px;margin-top:10px;margin-bottom:10px"><img src="/images/New_ui/export/line_export.png"></div>
 												<div class="KoolshareBottom">
