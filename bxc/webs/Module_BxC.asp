@@ -282,6 +282,7 @@
 							};*/
 							var top=document.getElementById('onlineTime');
 							var sec=parseDom(res)[0];
+							sec.id='onlineTable';
 							top.appendChild(sec);
 							top.style.display='block'
 
@@ -302,6 +303,8 @@
 				// body...
 				var top=document.getElementById('onlineTime');
 				top.style.display='none';
+				var sec=document.getElementById('onlineTable');
+				top.removeChild(sec);
 			}
 
 			function bxc_update(){
