@@ -1,23 +1,39 @@
 #!/bin/sh
-
-BXC_NETWORK="/koolshare/bin/bxc-network"
-BXC_WORKER="/koolshare/bin/bxc-worker"
-BXC_CONF="/koolshare/bxc/bxc.config"
-BXC_EXT_TARGET="www.baidu.com"
-BXC_INTF="tun0"
-
-source $BXC_CONF
+source /koolshare/bxc/bxc.config
 
 logdebug(){
   if [ "$LOG_LEVEL"x == "debug"x ];then
-    logger -c "INFO: $1" -t bonuscloud-node > /dev/null 2>&1
+  	if [ "$LOG_MODE"x == "syslog"x ];then
+    	logger -c "INFO: $1" -t bonuscloud-node > /dev/null 2>&1
+    elif [ "$LOG_MODE"x == "file"x ];then
+    	echo "[`TZ=UTC-8 date -R '+%Y-%m-%d %H:%M:%S')`] INFO: $1" >> $LOG_FILE
+  	fi
   fi
 }
 
 logerr(){
   if [ "$LOG_LEVEL"x == "error"x ] || [ "$LOG_LEVEL"x == "debug"x ];then
-    logger -c "ERROR: $1" -t bonuscloud-node > /dev/null 2>&1
+    if [ "$LOG_MODE"x == "syslog"x ];then
+    	logger -c "ERROR: $1" -t bonuscloud-node > /dev/null 2>&1
+    elif [ "$LOG_MODE"x == "file"x ];then
+    	echo "[`TZ=UTC-8 date -R '+%Y-%m-%d %H:%M:%S')`] EROOR $1" >> $LOG_FILE
+  	fi
   fi
+}
+
+logclear(){
+	if [ -s $LOG_FILE ];then
+		eval first_time=$(date +%s -d "`head -1 $LOG_FILE | awk '{print $1" "$2}' | sed 's/\[//' | sed 's/\]//'`")
+		if [ "$LOG_DAYS" -gt 0 ] && [ "$first_time" -gt 0 ] 2>/dev/null;then
+			current_time=`date +%s`
+			diff_time=$(($current_time - $first_time)) > /dev/null 2>&1
+			valid_seconds=$(($LOG_DAYS * 3600 * 24))
+			if [ "$diff_time" -ge "$valid_seconds" ] 2>/dev/null;then
+				rm -f $LOG_FILE > /dev/null 2>&1
+				logdebug "log file $LOG_FILE cleared."
+			fi
+		fi
+	fi
 }
 
 check_pid(){
@@ -205,6 +221,7 @@ check_iptables() {
 	fi
 }
 
+logclear
 check_iptables
 check_pid
 check_ext_net

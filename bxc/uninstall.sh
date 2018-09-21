@@ -1,6 +1,7 @@
 #!/bin/sh
 
 /koolshare/scripts/bxc.sh stop
+/koolshare/scripts/bxc.sh cronoff
 
 dbus remove bxc_bcode
 dbus remove bxc_option

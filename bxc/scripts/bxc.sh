@@ -4,36 +4,29 @@
 
 # load path environment in dbus databse
 eval `dbus export bxc`
-
-BXC_DIR="/koolshare/bxc"
-BXC_CONF="$BXC_DIR/bxc.config"
-BXC_NETWORK="/koolshare/bin/bxc-network"
-BXC_WORKER="/koolshare/bin/bxc-worker"
-BXC_WORKER_PORT="8901"
-BXC_SERVER="http://101.236.37.92"
-BXC_TOOL="/koolshare/scripts/bxc-tool.sh"
-BXC_PKG="bxc.tar.gz"
-
-BXC_SSL_CA="/tmp/etc/bxc-network/ca.crt"
-BXC_SSL_CRT="/tmp/etc/bxc-network/client.crt"
-BXC_SSL_KEY="/tmp/etc/bxc-network/client.key"
-
-BXC_BOUND_URL="https://117.48.224.43/idb/dev"
-BXC_UPDATE_URL="https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/bxc.tar.gz"
-
+alias echo_date="echo [$(TZ=UTC-8 date -R '+%Y-%m-%d %H:%M:%S')] "
 
 source /koolshare/scripts/base.sh
-source $BXC_CONF
+source /koolshare/bxc/bxc.config
+BXC_CONF="/koolshare/bxc/bxc.config"
 
 logdebug(){
   if [ "$LOG_LEVEL"x == "debug"x ];then
-    logger -c "INFO: $1" -t bonuscloud-node > /dev/null 2>&1
+  	if [ "$LOG_MODE"x == "syslog"x ];then
+    	logger -c "INFO: $1" -t bonuscloud-node > /dev/null 2>&1
+    elif [ "$LOG_MODE"x == "file"x ];then
+    	echo "[`TZ=UTC-8 date -R '+%Y-%m-%d %H:%M:%S')`] INFO: $1" >> $LOG_FILE
+  	fi
   fi
 }
 
 logerr(){
   if [ "$LOG_LEVEL"x == "error"x ] || [ "$LOG_LEVEL"x == "debug"x ];then
-    logger -c "ERROR: $1" -t bonuscloud-node > /dev/null 2>&1
+    if [ "$LOG_MODE"x == "syslog"x ];then
+    	logger -c "ERROR: $1" -t bonuscloud-node > /dev/null 2>&1
+    elif [ "$LOG_MODE"x == "file"x ];then
+    	echo "[`TZ=UTC-8 date -R '+%Y-%m-%d %H:%M:%S')`] EROOR $1" >> $LOG_FILE
+  	fi
   fi
 }
 
@@ -278,53 +271,56 @@ opkg_install() {
 	if [ $opkg_exist -ne 0 ];then
 		logdebug "opkg not found, install opkg: /koolshare/scripts/bxc-tool.sh"
 		mkdir -p /tmp/opt && ln -s /tmp/opt /opt > /dev/null 2>&1
-		chmod +x /koolshare/scripts/bxc-tool.sh > /dev/null 2>&1
-		/koolshare/scripts/bxc-tool.sh > /dev/null 2>&1
-	fi
-
-	opkg_exist=`which opkg > /dev/null 2>&1;echo $?`
-	if [ $opkg_exist -ne 0 ];then
-		logerr "opkg install failed, exit"
-		exit 1
+		wget -t 3 -T 3 -O /koolshare/scripts/bxc-opkg-install.sh $ENTWARE_INSTALL_URL > /dev/null 2>&1
+		if [ -s /koolshare/scripts/bxc-opkg-install.sh ];then
+			logdebug "install script download finished, install opkg..."
+			chmod +x /koolshare/scripts/bxc-opkg-install.sh > /dev/null 2>&1
+			/koolshare/scripts/bxc-opkg-install.sh > /dev/null 2>&1
+			opkg_exist=`which opkg > /dev/null 2>&1;echo $?`
+			if [ $opkg_exist -ne 0 ];then
+				logerr "opkg install failed."
+			else
+				opkg_update=`opkg update > /dev/null 2>&1;echo $?`
+				if [ $opkg_update -ne 0 ];then
+					logerr "opkg update failed."
+				else
+					logdebug "opkg install success!"
+				fi
+			fi
+		else
+			logerr "opkg install script download failed from $ENTWARE_INSTALL_URL"
+		fi
+		
 	else
-		logdebug "opkg install success"
+		opkg_update=`opkg update > /dev/null 2>&1;echo $?`
+		if [ $opkg_update -ne 0 ];then
+			logerr "opkg update failed."
+		else
+			logdebug "opkg already installed."
+		fi	
 	fi
 }
 
 pkg_install() {
-	for pkg in `cat /koolshare/bxc/lib/install_order`
+	for pkg in `echo $OPKG_PKGS`
 	do
-		pkg_prefix=`echo "$pkg" | awk -F_ '{print $1}'`
-		
-		# 本地安装
-		pkg_exist=`opkg list-installed | grep "$pkg_prefix" > /dev/null 2>&1;echo $?`
-		if [ $pkg_exist -ne 0 ];then
-			logdebug "$pkg not exist, install with local file /koolshare/bxc/lib/$pkg"
-			/opt/bin/opkg install "/koolshare/bxc/lib/$pkg" > /dev/null 2>&1
-		else
-			logdebug "$pkg exist"
+		pkg_full=`opkg list-installed | grep "$pkg"`
+		if [ -n "$pkg_full" ];then
+			logdebug "$pkg_full exist"
 			continue
-		fi
-
-		# 网络安装
-		pkg_exist=`opkg list-installed | grep "$pkg_prefix" > /dev/null 2>&1;echo $?`
-		if [ $pkg_exist -ne 0 ];then
-			logdebug "$pkg loacal install failed, remote install with opkg..."
-			opkg update > /dev/null 2>&1
-			opkg install "$pkg_prefix" > /dev/null 2>&1
-		fi
-
-		# 检测
-		pkg_exist=`opkg list-installed | grep "$pkg_prefix" > /dev/null 2>&1;echo $?`
-		if [ $pkg_exist -ne 0 ];then
-			logerr "$pkg install failed, exit"
-			exit 1
 		else
-			logdebug "$pkg install success"
+			logdebug "$pkg not exist, opkg install $pkg..."
+			opkg update > /dev/null 2>&1
+			opkg install "$pkg" > /dev/null 2>&1
+			pkg_full=`opkg list-installed | grep "$pkg"`
+			if [ -n "$pkg_full" ];then
+				logdebug "$pkg_full install success"
+			else
+				logerr "$pkg install failed, please try command: opkg install $pkg "
+			fi
 		fi
 	done
 }
-
 
 status_bxc(){
 	network_status=`ps | grep "bxc-network" | grep -v grep > /dev/null 2>&1; echo $?`
@@ -479,7 +475,7 @@ cron_del(){
 update_bxc(){
 	stop_bxc
 
-	logdebug "Dowanlod update package..."
+	logdebug "Download update package..."
 	cd /tmp/ && rm -fr /tmp/bxc*
 	wget -q -t 3 -O $BXC_PKG $BXC_UPDATE_URL > /dev/null 2>&1
 	if [ -s $BXC_PKG ];then
@@ -509,57 +505,60 @@ update_bxc(){
 	fi
 }
 
-if [ -z "$1" ];then
-	ACTION=`dbus get bxc_option`
-else
-	ACTION=$1
-fi
-
-logdebug "bxc.sh $ACTION"
-
-case $ACTION in
-start)
-	init
-	cron_add
-	start_bxc
-	;;
-stop)
-	stop_bxc
-	cron_del
-	;;
-restart)
-	stop_bxc
-	start_bxc
-	;;
-status)
-	status_bxc
-	;;
-bound)
-	bound_bxc
-	;;
-booton)
-	booton_bxc
-	;;
-bootoff)
-	bootoff_bxc
-	;;
-debuglog)
-	log_debug
-	;;
-errorlog)
-	log_err
-	;;
-cronon)
-	cron_add
-	;;
-cronoff)
-	cron_del
-	;;
-update)
-	update_bxc
-	;;
-*)
-	exit 1
-    ;;
-esac
-dbus set bxc_option=""
+for ACTION in $*;
+do
+	case $ACTION in
+	start)
+		logdebug "bxc.sh $ACTION"
+		init
+		cron_add
+		start_bxc
+		;;
+	stop)
+		logdebug "bxc.sh $ACTION"
+		stop_bxc
+		cron_del
+		;;
+	status)
+		logdebug "bxc.sh $ACTION"
+		status_bxc
+		;;
+	bound)
+		logdebug "bxc.sh $ACTION"
+		bound_bxc
+		;;
+	booton)
+		logdebug "bxc.sh $ACTION"
+		booton_bxc
+		;;
+	bootoff)
+		logdebug "bxc.sh $ACTION"
+		bootoff_bxc
+		;;
+	debuglog)
+		logdebug "bxc.sh $ACTION"
+		log_debug
+		;;
+	errorlog)
+		logdebug "bxc.sh $ACTION"
+		log_err
+		;;
+	cronon)
+		logdebug "bxc.sh $ACTION"
+		cron_add
+		;;
+	cronoff)
+		logdebug "bxc.sh $ACTION"
+		cron_del
+		;;
+	update)
+		logdebug "bxc.sh $ACTION"
+		update_bxc
+		;;
+	*)
+		continue
+	    ;;
+	esac
+done
+exit 0
+#dbus set bxc_option=""
