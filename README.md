@@ -7,10 +7,6 @@ Arm v8 Lite Node Running in Merlin with koolshare.
 
 Suggest for Koolshare merlin(374.6) with jffs enabled.
 
-#### Community contributors： 
-
-宁（qh szl）
-
 
 ## ARM v7
 ### Download：https://github.com/BonusCloud/BonusCloud-Node/blob/master/bxc.tar.gz
@@ -53,3 +49,8 @@ K3
 
 #### Tenda 
 AC18
+
+
+### Community contributors： 
+
+宁（qh szl）
