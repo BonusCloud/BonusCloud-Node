@@ -5,55 +5,75 @@
 eval `dbus export bxc`
 alias echo_date='echo 【$(TZ=UTC-8 date -R +%Y年%m月%d日\ %X)】:'
 
+MD5_CHECK_URL="https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/md5.txt"
+
 
 opkg_install() {
 	opkg_exist=`which opkg > /dev/null 2>&1;echo $?`
 	if [ $opkg_exist -ne 0 ];then
-		echo_date 系统中未检测到opkg，安装opkg...
-		mkdir -p /tmp/opt && ln -s /tmp/opt /opt > /dev/null 2>&1
-		chmod +x /koolshare/scripts/bxc-tool.sh > /dev/null 2>&1
-		/koolshare/scripts/bxc-tool.sh > /dev/null 2>&1
-	fi
-
-	opkg_exist=`which opkg > /dev/null 2>&1;echo $?`
-	if [ $opkg_exist -ne 0 ];then
-		echo_date 安装opkg失败，退出安装!
-		exit 1
+		echo_date 系统中未检测到opkg，检测opkg安装环境...
+		mkdir -p /tmp/opt/ > /dev/null 2>&1
+		if [ ! -d /tmp/opt ];then
+			echo_date 创建目录/tmp/opt失败，软链/tmp/opt到/jffs/opt...
+			mkdir -p /jffs/opt && ln -s /jffs/opt /tmp/opt > /dev/null 2>&1
+		fi
+		echo_date 下载opkg安装脚本...
+		wget -t 3 -T 3 -O /koolshare/scripts/bxc-opkg-install.sh $ENTWARE_INSTALL_URL > /dev/null 2>&1
+		if [ -s /koolshare/scripts/bxc-opkg-install.sh ];then
+			echo_date 脚本下载完成，安装opkg...
+			chmod +x /koolshare/scripts/bxc-opkg-install.sh > /dev/null 2>&1
+			/koolshare/scripts/bxc-opkg-install.sh > /dev/null 2>&1
+			opkg_exist=`which opkg > /dev/null 2>&1;echo $?`
+			if [ $opkg_exist -ne 0 ];then
+				echo_date 安装opkg失败，退出安装!
+				exit 1
+			else
+				opkg_update=`opkg update > /dev/null 2>&1;echo $?`
+				if [ $opkg_update -ne 0 ];then
+					echo_date opkg 更新信息失败，无法安装相关依赖，退出安装！
+					echo_date 您可以在命令行下执行opkg update命令，以验证远程安装依赖是否可行
+					exit 1
+				else
+					echo_date opkg安装成功！
+				fi
+			fi
+		else
+			echo_date 下载opkg安装脚本失败，退出安装！
+			echo_date 您可以尝试访问"$ENTWARE_INSTALL_URL"，以验证网络是否正常。
+			exit 1
+		fi
+		
 	else
-		echo_date opkg安装成功！
+		opkg_update=`opkg update > /dev/null 2>&1;echo $?`
+		if [ $opkg_update -ne 0 ];then
+			echo_date opkg update失败，无法安装相关依赖，退出安装！
+			echo_date 您可以在命令行执行：opkg update ，以验证远程安装依赖是否可行
+			exit 1
+		else
+			echo_date 系统中已安装opkg，并且更新信息成功！
+		fi	
 	fi
 }
 
 pkg_install() {
-	for pkg in `cat /koolshare/bxc/lib/install_order`
+	for pkg in `echo $OPKG_PKGS`
 	do
-		pkg_prefix=`echo "$pkg" | awk -F_ '{print $1}'`
-		
-		# 网络安装
-		pkg_exist=`opkg list-installed | grep "$pkg_prefix" > /dev/null 2>&1;echo $?`
-		if [ $pkg_exist -ne 0 ];then
-			echo_date 通过opkg安装"$pkg"...
-			opkg update > /dev/null 2>&1
-			opkg install "$pkg_prefix" > /dev/null 2>&1
-		else
-			echo_date 系统已安装"$pkg"
+		pkg_full=`opkg list-installed | grep "$pkg"`
+		if [ -n "$pkg_full" ];then
+			echo_date 系统已安装"$pkg_full"
 			continue
-		fi
-
-		# 本地安装
-		pkg_exist=`opkg list-installed | grep "$pkg_prefix" > /dev/null 2>&1;echo $?`
-		if [ $pkg_exist -ne 0 ];then
-			echo_date opkg网络安装"$pkg"失败，尝试本地安装...
-			/opt/bin/opkg install "/koolshare/bxc/lib/$pkg" > /dev/null 2>&1
-		fi
-
-		# 检测
-		pkg_exist=`opkg list-installed | grep "$pkg_prefix" > /dev/null 2>&1;echo $?`
-		if [ $pkg_exist -ne 0 ];then
-			echo_date 安装"$pkg"失败，退出安装！
-			exit 1
 		else
-			echo_date "$pkg"安装成功！
+			echo_date opkg安装"$pkg"...
+			opkg update > /dev/null 2>&1
+			opkg install "$pkg" > /dev/null 2>&1
+			pkg_full=`opkg list-installed | grep "$pkg"`
+			if [ -n "$pkg_full" ];then
+				echo_date "$pkg_full"安装成功！
+			else
+				echo_date 安装"$pkg"失败，退出安装！
+				echo_date 您可以在命令行执行：opkg install "$pkg" ，手动验证安装
+				exit 1
+			fi
 		fi
 	done
 }
@@ -76,7 +96,7 @@ if [ $md5_exist -eq 0 ];then
 	echo_date 校验安装包...
 	if [ -f /tmp/bxc.tar.gz ];then
 		local_md5=`md5sum /tmp/bxc.tar.gz | awk '{print $1}'`
-		remote_md5=`curl -s -m 3 "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/md5.txt" | awk '{print $1}'`
+		remote_md5=`curl -s -m 3 $MD5_CHECK_URL | awk '{print $1}'`
 		check_remote=`echo $remote_md5 | wc -c`
 		if [ $check_remote -eq 33 ];then
 			if [ "$local_md5"x != "$remote_md5"x ];then
@@ -158,10 +178,9 @@ pkg_install
 echo_date 运行数据初始化...
 /koolshare/scripts/bxc.sh status
 /koolshare/scripts/bxc.sh booton
-/koolshare/scripts/bxc.sh cronon
 
 
 # delete install tar
 rm -rf /tmp/bxc* >/dev/null 2>&1
 
-echo_date 安装完毕，您可以在软件中心打开BxC-Node，绑定设备后运行程序！
+echo_date 安装完毕，您可以在软件中心打开BonusCloud-Node，绑定设备后运行程序！

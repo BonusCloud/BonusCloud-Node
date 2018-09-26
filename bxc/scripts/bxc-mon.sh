@@ -1,23 +1,74 @@
 #!/bin/sh
-
-BXC_NETWORK="/koolshare/bin/bxc-network"
-BXC_WORKER="/koolshare/bin/bxc-worker"
-BXC_CONF="/koolshare/bxc/bxc.config"
-BXC_EXT_TARGET="www.baidu.com"
-BXC_INTF="tun0"
-
-source $BXC_CONF
+source /koolshare/bxc/bxc.config
 
 logdebug(){
   if [ "$LOG_LEVEL"x == "debug"x ];then
-    logger -c "INFO: $1" -t bonuscloud-node > /dev/null 2>&1
+  	if [ "$LOG_MODE"x == "syslog"x ];then
+    	logger -c "INFO: $1" -t bonuscloud-node > /dev/null 2>&1
+    elif [ "$LOG_MODE"x == "file"x ];then
+    	echo "[`TZ=UTC-8 date -R '+%Y-%m-%d %H:%M:%S')`] INFO: $1" >> $LOG_FILE
+  	fi
   fi
 }
 
 logerr(){
   if [ "$LOG_LEVEL"x == "error"x ] || [ "$LOG_LEVEL"x == "debug"x ];then
-    logger -c "ERROR: $1" -t bonuscloud-node > /dev/null 2>&1
+    if [ "$LOG_MODE"x == "syslog"x ];then
+    	logger -c "ERROR: $1" -t bonuscloud-node > /dev/null 2>&1
+    elif [ "$LOG_MODE"x == "file"x ];then
+    	echo "[`TZ=UTC-8 date -R '+%Y-%m-%d %H:%M:%S')`] EROOR $1" >> $LOG_FILE
+  	fi
   fi
+}
+
+logclear(){
+	if [ -s $LOG_FILE ];then
+		eval first_time=$(date +%s -d "`head -1 $LOG_FILE | awk '{print $1" "$2}' | sed 's/\[//' | sed 's/\]//'`")
+		if [ "$LOG_DAYS" -gt 0 ] && [ "$first_time" -gt 0 ] 2>/dev/null;then
+			current_time=`date +%s`
+			diff_time=$(($current_time - $first_time)) > /dev/null 2>&1
+			valid_seconds=$(($LOG_DAYS * 3600 * 24))
+			if [ "$diff_time" -ge "$valid_seconds" ] 2>/dev/null;then
+				rm -f $LOG_FILE > /dev/null 2>&1
+				logdebug "log file $LOG_FILE cleared."
+			fi
+		fi
+	fi
+}
+
+info_report(){
+	version=""
+	if [ -s $BXC_VERSION_FILE ];then
+		version=`cat $BXC_VERSION_FILE`
+	fi
+	
+	cpu_info=""
+	if [ -f "/proc/cpuinfo" ];then
+		cpu_info=`cat /proc/cpuinfo | grep -e "^processor" | wc -l`
+	fi
+
+	mem_info=""
+	if [ -f "/proc/meminfo" ];then
+		mem_info=`cat /proc/meminfo | grep "MemTotal" | awk -F: '{print $2}'| sed 's/ //g'`
+	fi
+	hw_arch=`uname -m`
+
+	info="${version}#${hw_arch}#${cpu_info}#${mem_info}"
+	old_info=`dbus get bxc_node_info`
+	if [ "$info"x != "$old_info"x ];then
+		logdebug "node info changed: \"$old_info\" change to \"$info\", report info..."
+		dbus set bxc_node_info="$info"
+		fcode=`dbus get bxc_bcode`
+		mac=`dbus get bxc_wan_mac`
+		status_code=`curl -m 5 -k --cacert $BXC_SSL_CA --cert $BXC_SSL_CRT --key $BXC_SSL_KEY -H "Content-Type: application/json" -d "{\"mac\":\"$mac\", \"info\":\"$info\"}" -X PUT -w "\nstatus_code:"%{http_code}"\n" "https://117.48.224.43:8081/idb/dev/$fcode" | grep "status_code" | awk -F: '{print $2}'`
+		if [ $status_code -eq 200 ];then
+			logdebug "node info reported success!"
+		else
+			logerr "node info reported failed($status_code): curl -m 5 -k --cacert $BXC_SSL_CA --cert $BXC_SSL_CRT --key $BXC_SSL_KEY -H \"Content-Type: application/json\" -d \"{\"mac\":\"$mac\", \"info\":\"$info\",}\" -X PUT -w \"\nstatus_code:\"%{http_code}\"\n\" \"https://117.48.224.43:8081/idb/dev/$fcode\""
+		fi
+	else
+		logdebug "node info has not changed: $info"
+	fi
 }
 
 check_pid(){
@@ -56,6 +107,22 @@ check_ext_net(){
 		logdebug "ext-network icmp success: ping -q -W 1 -c 3 $BXC_EXT_TARGET"
 	else
 		logerr "ext-network icmp faild: ping -q -W 1 -c 3 $BXC_EXT_TARGET"
+	fi
+}
+
+check_env(){
+	# /proc/sys/net/netfilter/nf_conntrack_udp_timeout
+	if [ -f /proc/sys/net/netfilter/nf_conntrack_udp_timeout ];then
+		val=`cat /proc/sys/net/netfilter/nf_conntrack_udp_timeout`
+		if [ "$val"x != "30"x ];then
+			logerr "/proc/sys/net/netfilter/nf_conntrack_udp_timeout $val should be 30, auto change it.."
+			echo 30 > /proc/sys/net/netfilter/nf_conntrack_udp_timeout
+		else
+			logdebug "/proc/sys/net/netfilter/nf_conntrack_udp_timeout $val"
+		fi
+	else
+		logerr "/proc/sys/net/netfilter/nf_conntrack_udp_timeout not found, create with value 30.."
+		echo 30 > /proc/sys/net/netfilter/nf_conntrack_udp_timeout
 	fi
 }
 
@@ -205,8 +272,11 @@ check_iptables() {
 	fi
 }
 
+logclear
+info_report
 check_iptables
 check_pid
 check_ext_net
+check_env
 
 exit 0
