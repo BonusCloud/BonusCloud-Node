@@ -7,7 +7,7 @@ Arm v8 Lite Node Running in Merlin with koolshare.
 
 Suggest for Koolshare merlin(374.6) with jffs enabled.
 
-### Support The Router Of ARM-v7 Architecture List Now
+### Support The Router Of ARM-v8 Architecture List Now
 
 #### ASUS
 AC86U
