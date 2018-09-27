@@ -124,6 +124,16 @@ check_env(){
 		logerr "/proc/sys/net/netfilter/nf_conntrack_udp_timeout not found, create with value 30.."
 		echo 30 > /proc/sys/net/netfilter/nf_conntrack_udp_timeout
 	fi
+
+	# ipv6 route check
+	exist=`ip -6 route show table local | grep "local ::1 via :: dev lo" > /dev/null 2>&1;echo $?`
+	if [ $exist -ne 0 ];then
+		logerr "route \"local ::1 via :: dev lo\" note exist, restoring..."
+		ip -6 addr del ::1/128 dev lo > /dev/null 2>&1
+		ip -6 addr add ::1/128 dev lo > /dev/null 2>&1
+	else
+		logdebug "route \"local ::1 via :: dev lo\" already exist"
+	fi
 }
 
 check_iptables() {
