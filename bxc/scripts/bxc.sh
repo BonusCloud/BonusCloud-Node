@@ -127,6 +127,21 @@ vpn_env(){
 	else
 		logdebug "route \"local ::1 via :: dev lo\" already exist"
 	fi
+
+	tun0_ipaddr=`ip -6  addr show dev tun0 | grep "inet6" | awk '{print $2}'`
+	if [ -n "$tun0_ipaddr" ];then
+		iprefix=`echo $tun0_ipaddr | awk -F/ '{print $1}'`
+		exist=`ip -6 route show table local | grep "local $iprefix via :: dev lo" > /dev/null 2>&1;echo $?`
+		if [ $exist -ne 0 ];then
+			logerr "route \"local $iprefix via :: dev lo\" note exist, restoring..."
+			ip -6 addr del $tun0_ipaddr dev lo > /dev/null 2>&1
+			ip -6 addr add $tun0_ipaddr dev lo > /dev/null 2>&1
+		else
+			logdebug "route \"local $iprefix via :: dev lo\" already exist"
+		fi
+	else
+		logerr "get tun0_ipaddr failed: ip -6 addr show dev tun0 | grep \"inet6\" | awk '{print $2}'"
+	fi
 }
 
 ipv6_enable() {
