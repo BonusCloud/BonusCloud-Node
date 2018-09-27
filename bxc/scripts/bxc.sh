@@ -368,6 +368,12 @@ stop_bxc(){
 bound_bxc(){
 	bcode=`dbus get bxc_input_bcode`
 	mac=`dbus get bxc_wan_mac`
+	mkdir -p $BXC_SSL_DIR > /dev/null 2>&1
+	if [ ! -d $BXC_SSL_DIR ];then
+		dbus set bxc_bound_status="无法创建目录$BXC_SSL_DIR"
+		logerr "mkdir $BXC_SSLDIR failed, exit"
+		exit 1
+	fi
 
 	curl -k -m 5 -H "Content-Type: application/json" -d "{\"fcode\":\"$bcode\", \"mac_address\":\"$mac\"}" -w "\nstatus_code:"%{http_code}"\n" $BXC_BOUND_URL > /koolshare/bxc/curl.res
 	logdebug "curl -k -H \"Content-Type: application/json\" -d \"{\"fcode\":\"$bcode\", \"mac_address\":\"$mac\"}\" -w \"\nstatus_code:\"%{http_code}\"\n\" $BXC_BOUND_URL"

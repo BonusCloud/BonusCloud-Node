@@ -348,7 +348,7 @@
 				var local_version = dbus_read("bxc_local_version");
 
 				$.ajax({
-			        url: 'https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/aarch64/bxc/bxc/version',
+					url: 'https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/aarch64/bxc/bxc/version',
 			        type: 'GET',
 			        success: function(res) {
 			        	if(res) {
@@ -439,10 +439,13 @@
 								cell1.innerHTML = res[i]["fcode"];
 								var cell2 = row.insertCell(1);
 								cell2.align="center";
-								cell2.innerHTML = res[i]["contribution"];
+								cell2.innerHTML = res[i]["online_contribution"];
 								var cell3 = row.insertCell(2);
 								cell3.align="center";
-								cell3.innerHTML = res[i]["time"];
+								cell3.innerHTML = res[i]["task_contribution"];
+								var cell4 = row.insertCell(3);
+								cell4.align="center";
+								cell4.innerHTML = res[i]["time"];
 							}
 						}
 					})
@@ -686,12 +689,13 @@
 
 												<div id="tablet_2" style="display: none;">
 													<br/>
-													<table id="online_table" border="1" width="95%" style="display: none;">
+													<table id="online_table" border="1" width="100%" style="display: none;">
 														<thead>
 															<tr>
 																<th width="40%">邀请码</th>
-																<th width="20%">贡献度（分钟）</th>
-																<th width="40%">时间段（小时）</th>
+																<th width="20%">网络在线（分钟）</th>
+																<th width="20%">任务分数</th>
+																<th width="20%">时间段（小时）</th>
 															</tr>
 														</thead>
 														<tbody id="online_tbody">

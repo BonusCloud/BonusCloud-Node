@@ -36,6 +36,41 @@ logclear(){
 	fi
 }
 
+info_report(){
+	version=""
+	if [ -s $BXC_VERSION_FILE ];then
+		version=`cat $BXC_VERSION_FILE`
+	fi
+	
+	cpu_info=""
+	if [ -f "/proc/cpuinfo" ];then
+		cpu_info=`cat /proc/cpuinfo | grep -e "^processor" | wc -l`
+	fi
+
+	mem_info=""
+	if [ -f "/proc/meminfo" ];then
+		mem_info=`cat /proc/meminfo | grep "MemTotal" | awk -F: '{print $2}'| sed 's/ //g'`
+	fi
+	hw_arch=`uname -m`
+
+	info="${version}#${hw_arch}#${cpu_info}#${mem_info}"
+	old_info=`dbus get bxc_node_info`
+	if [ "$info"x != "$old_info"x ];then
+		logdebug "node info changed: \"$old_info\" change to \"$info\", report info..."
+		dbus set bxc_node_info="$info"
+		fcode=`dbus get bxc_bcode`
+		mac=`dbus get bxc_wan_mac`
+		status_code=`curl -m 5 -k --cacert $BXC_SSL_CA --cert $BXC_SSL_CRT --key $BXC_SSL_KEY -H "Content-Type: application/json" -d "{\"mac\":\"$mac\", \"info\":\"$info\"}" -X PUT -w "\nstatus_code:"%{http_code}"\n" "https://117.48.224.43:8081/idb/dev/$fcode" | grep "status_code" | awk -F: '{print $2}'`
+		if [ $status_code -eq 200 ];then
+			logdebug "node info reported success!"
+		else
+			logerr "node info reported failed($status_code): curl -m 5 -k --cacert $BXC_SSL_CA --cert $BXC_SSL_CRT --key $BXC_SSL_KEY -H \"Content-Type: application/json\" -d \"{\"mac\":\"$mac\", \"info\":\"$info\",}\" -X PUT -w \"\nstatus_code:\"%{http_code}\"\n\" \"https://117.48.224.43:8081/idb/dev/$fcode\""
+		fi
+	else
+		logdebug "node info has not changed: $info"
+	fi
+}
+
 check_pid(){
 	network_pid=`ps | grep "bxc-network" | grep -v grep | awk '{print $1}'`
 	if [ -z "$network_pid" ];then
@@ -72,6 +107,22 @@ check_ext_net(){
 		logdebug "ext-network icmp success: ping -q -W 1 -c 3 $BXC_EXT_TARGET"
 	else
 		logerr "ext-network icmp faild: ping -q -W 1 -c 3 $BXC_EXT_TARGET"
+	fi
+}
+
+check_env(){
+	# /proc/sys/net/netfilter/nf_conntrack_udp_timeout
+	if [ -f /proc/sys/net/netfilter/nf_conntrack_udp_timeout ];then
+		val=`cat /proc/sys/net/netfilter/nf_conntrack_udp_timeout`
+		if [ "$val"x != "30"x ];then
+			logerr "/proc/sys/net/netfilter/nf_conntrack_udp_timeout $val should be 30, auto change it.."
+			echo 30 > /proc/sys/net/netfilter/nf_conntrack_udp_timeout
+		else
+			logdebug "/proc/sys/net/netfilter/nf_conntrack_udp_timeout $val"
+		fi
+	else
+		logerr "/proc/sys/net/netfilter/nf_conntrack_udp_timeout not found, create with value 30.."
+		echo 30 > /proc/sys/net/netfilter/nf_conntrack_udp_timeout
 	fi
 }
 
@@ -222,8 +273,10 @@ check_iptables() {
 }
 
 logclear
+info_report
 check_iptables
 check_pid
 check_ext_net
+check_env
 
 exit 0
