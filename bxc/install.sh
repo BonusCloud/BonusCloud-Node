@@ -82,7 +82,7 @@ case $(uname -m) in
 		echo_date 固件平台【koolshare merlin aarch64】符合安装要求，开始安装插件！
 	;;
 	*)
-		echo_date 本插件适用于koolshare merlin armv7l固件平台，你的平台"$(uname -m)"不能安装！！！
+		echo_date 本插件适用于koolshare merlin aarch64固件平台，你的平台"$(uname -m)"不能安装！！！
 		echo_date 退出安装！
 		exit 1
 	;;
