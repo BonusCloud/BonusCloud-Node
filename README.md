@@ -7,10 +7,7 @@ Arm v8 Lite Node Running in Merlin with koolshare.
 
 Suggest for Koolshare merlin(374.6) with jffs enabled.
 
-### Support The Router Of ARM-v8 Architecture List Now
-
-#### ASUS
-AC86U
+### Support The Router Of ARM-v8 Architecture List Now：https://bonuscloud.gitbook.io/help/device-support-list-of-lite-node
 
 
 ## ARM v7
@@ -20,41 +17,7 @@ Arm v7 Lite Node running in Merlin with koolshare.
 
 Suggest for koolshare merlin(380.69-X7.8) with jffs enabled. 
 
-### Support The Router Of ARM-v7 Architecture List Now
-
-#### NETGEAR
-R6300 v2 
-
-R6400 
-
-R6900
-
-R7000 
-
-R8500 
-
-#### ASUS 
-AC66U-B1
-
-AC68U
-
-AC87U
-
-AC88U
-
-AC5300 
-
-#### LINKSYS 
-EA6200
-
-EA6400 
-
-#### PHICOMM 
-K3 
-
-#### Tenda 
-AC18
-
+### Support The Router Of ARM-v7 Architecture List Now：https://bonuscloud.gitbook.io/help/device-support-list-of-lite-node
 
 ## Community contributors： 
 
