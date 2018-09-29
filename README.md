@@ -7,7 +7,8 @@ Arm v8 Lite Node Running in Merlin with koolshare.
 
 Suggest for Koolshare merlin(374.6) with jffs enabled.
 
-### Support The Router Of ARM-v8 Architecture List Now：https://bonuscloud.gitbook.io/help/device-support-list-of-lite-node
+### Support The Router Of ARM-v8 Architecture List Now：
+https://bonuscloud.gitbook.io/help/device-support-list-of-lite-node
 
 
 ## ARM v7
@@ -17,7 +18,8 @@ Arm v7 Lite Node running in Merlin with koolshare.
 
 Suggest for koolshare merlin(380.69-X7.8) with jffs enabled. 
 
-### Support The Router Of ARM-v7 Architecture List Now：https://bonuscloud.gitbook.io/help/device-support-list-of-lite-node
+### Support The Router Of ARM-v7 Architecture List Now：
+https://bonuscloud.gitbook.io/help/device-support-list-of-lite-node
 
 ## Community contributors： 
 
