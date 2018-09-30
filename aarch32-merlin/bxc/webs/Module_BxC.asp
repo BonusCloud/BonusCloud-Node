@@ -353,7 +353,7 @@
 				var local_version = dbus_read("bxc_local_version");
 
 				$.ajax({
-			        url: 'https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/bxc/bxc/version',
+			        url: 'https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/aarch32-merlin/bxc/bxc/version',
 			        type: 'GET',
 			        success: function(res) {
 			        	if(res) {
