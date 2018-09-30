@@ -12,7 +12,7 @@ https://bonuscloud.gitbook.io/help/device-support-list-of-lite-node#support-the-
 
 
 ## ARM v7
-### Download：https://github.com/BonusCloud/BonusCloud-Node/blob/master/bxc.tar.gz
+### Download：https://github.com/BonusCloud/BonusCloud-Node/blob/master/aarch32-merlin/bxc.tar.gz
 
 Arm v7 Lite Node running in Merlin with koolshare.
 
