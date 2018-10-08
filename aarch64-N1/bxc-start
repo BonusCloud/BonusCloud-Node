@@ -1,7 +1,6 @@
 #!/bin/sh
 
 BASEDIR=$(dirname "$0")
-echo $BASEDIR
 MACADDR=$(cat /sys/class/net/eth0/address)
 BXCBIN="https://github.com/BonusCloud/BonusCloud-Node/raw/master/aarch64-merlin/bxc.tar.gz"
 
@@ -22,7 +21,7 @@ if [ ! -f $BASEDIR/bxc-network ];  then
 	rm -rf $BASEDIR/bxc
 
 	# Install Dependency
-	apt update && apt install -y net-tools libjson-c3 libltdl7
+	apt update && apt install -y net-tools libjson-c3 libltdl7 curl python
 
 	mkdir -p /opt/lib
 	ln -s /lib/ld-linux-aarch64.so.1 /opt/lib/ld-linux-aarch64.so.1
@@ -42,6 +41,16 @@ fi
 if [ ! -f $BASEDIR/curl.res ];  then
 	# Bound BCODE
 	curl -s -k -m 5 -H "Content-Type: application/json" -d "{\"fcode\":\"$BCODE\", \"mac_address\":\"$MACADDR\"}" -w "\nstatus_code:"%{http_code}"\n" https://117.48.224.43/idb/dev > $BASEDIR/curl.res
+	bcode_res=$(grep status_code $BASEDIR/curl.res | cut -d : -f 2)
+	if [ "$bcode_res" != "200" ]; then
+		echo "BCODE: $BCODE"
+		echo "MAC: $MACADDR"
+		echo "RESULT:"
+		head -n 1 $BASEDIR/curl.res | python -m json.tool
+		rm -rf $BASEDIR/curl.res
+		echo "[ERROR] Failed to bound device."
+		exit 1 
+	fi
 	echo `cat $BASEDIR/curl.res | bxc-json.sh | egrep "\"Cert\",\"key\"" | awk -F\" '{print $6}' | sed 's/"//g'` > $BASEDIR/client.key
 	echo `cat $BASEDIR/curl.res | bxc-json.sh | egrep "\"Cert\",\"cert\"" | awk -F\" '{print $6}' | sed 's/"//g'` > $BASEDIR/client.crt
 	echo `cat $BASEDIR/curl.res | bxc-json.sh | egrep "\"Cert\",\"ca\"" | awk -F\" '{print $6}' | sed 's/"//g'` > $BASEDIR/ca.crt
@@ -56,23 +65,22 @@ chmod 600 /tmp/etc/bxc-network/*
 
 # Start BXC Binary
 while [ ! -d /sys/class/net/tun0 ];  do
+	pkill bxc-network
+	sleep 3
 	bxc-network
 	echo
-	sleep 3
+	sleep 10
 done
 
 bxc-worker
-sleep 3
 
 # Print Interface Status
 ifconfig tun0
 
 cat <<EOT > $BASEDIR/bxc-status
 #!/bin/sh
-
 BASEDIR=\$(dirname "\$0")
 BCODE=\$(cat \$BASEDIR/bcode)
-
 ifconfig tun0
 curl -s http://183.2.168.127:8080/fcode/json/\$BCODE | python -m json.tool
 EOT
@@ -82,7 +90,6 @@ chmod +x $BASEDIR/bxc-status
 # Write BXC Stop
 cat <<EOT > $BASEDIR/bxc-stop
 #!/bin/sh
-
 rm -rf /tmp/etc/bxc-network
 pkill bxc-worker
 pkill bxc-worker
