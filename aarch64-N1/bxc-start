@@ -22,7 +22,7 @@ if [ ! -f $BASEDIR/bxc-network ];  then
 	rm -rf $BASEDIR/bxc
 
 	# Install Dependency
-	apt update && apt install -y net-tools libjson-c3 libltdl7
+	apt update && apt install -y net-tools libjson-c3 libltdl7 curl python
 
 	mkdir -p /opt/lib
 	ln -s /lib/ld-linux-aarch64.so.1 /opt/lib/ld-linux-aarch64.so.1
@@ -56,23 +56,22 @@ chmod 600 /tmp/etc/bxc-network/*
 
 # Start BXC Binary
 while [ ! -d /sys/class/net/tun0 ];  do
+	pkill bxc-network
+	sleep 3
 	bxc-network
 	echo
-	sleep 3
+	sleep 10
 done
 
 bxc-worker
-sleep 3
 
 # Print Interface Status
 ifconfig tun0
 
 cat <<EOT > $BASEDIR/bxc-status
 #!/bin/sh
-
 BASEDIR=\$(dirname "\$0")
 BCODE=\$(cat \$BASEDIR/bcode)
-
 ifconfig tun0
 curl -s http://183.2.168.127:8080/fcode/json/\$BCODE | python -m json.tool
 EOT
@@ -82,7 +81,6 @@ chmod +x $BASEDIR/bxc-status
 # Write BXC Stop
 cat <<EOT > $BASEDIR/bxc-stop
 #!/bin/sh
-
 rm -rf /tmp/etc/bxc-network
 pkill bxc-worker
 pkill bxc-worker
