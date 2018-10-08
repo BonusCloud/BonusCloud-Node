@@ -24,4 +24,5 @@ https://bonuscloud.gitbook.io/help/device-support-list-of-lite-node
 ## Community contributors： 
 
 宁（qh szl）https://github.com/qinghon
+
 Betterman  https://github.com/bettermanbao
