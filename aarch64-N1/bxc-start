@@ -1,7 +1,6 @@
 #!/bin/sh
 
 BASEDIR=$(dirname "$0")
-echo $BASEDIR
 MACADDR=$(cat /sys/class/net/eth0/address)
 BXCBIN="https://github.com/BonusCloud/BonusCloud-Node/raw/master/aarch64-merlin/bxc.tar.gz"
 
@@ -42,6 +41,16 @@ fi
 if [ ! -f $BASEDIR/curl.res ];  then
 	# Bound BCODE
 	curl -s -k -m 5 -H "Content-Type: application/json" -d "{\"fcode\":\"$BCODE\", \"mac_address\":\"$MACADDR\"}" -w "\nstatus_code:"%{http_code}"\n" https://117.48.224.43/idb/dev > $BASEDIR/curl.res
+	bcode_res=$(grep status_code $BASEDIR/curl.res | cut -d : -f 2)
+	if [ "$bcode_res" != "200" ]; then
+		echo "BCODE: $BCODE"
+		echo "MAC: $MACADDR"
+		echo "RESULT:"
+		head -n 1 $BASEDIR/curl.res | python -m json.tool
+		rm -rf $BASEDIR/curl.res
+		echo "[ERROR] Failed to bound device."
+		exit 1 
+	fi
 	echo `cat $BASEDIR/curl.res | bxc-json.sh | egrep "\"Cert\",\"key\"" | awk -F\" '{print $6}' | sed 's/"//g'` > $BASEDIR/client.key
 	echo `cat $BASEDIR/curl.res | bxc-json.sh | egrep "\"Cert\",\"cert\"" | awk -F\" '{print $6}' | sed 's/"//g'` > $BASEDIR/client.crt
 	echo `cat $BASEDIR/curl.res | bxc-json.sh | egrep "\"Cert\",\"ca\"" | awk -F\" '{print $6}' | sed 's/"//g'` > $BASEDIR/ca.crt
