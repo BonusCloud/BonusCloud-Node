@@ -38,8 +38,8 @@ if [ ! -f $BASEDIR/curl.res ];  then
 		echo "BCODE: $BCODE"
 		echo "MAC: $MACADDR"
 		echo "RESULT:"
-		cat $BASEDIR/curl.res
 		# head -n 1 $BASEDIR/curl.res | python -m json.tool
+		cat $BASEDIR/curl.res | $BASEDIR/bxc-json.sh | egrep '\["details"\]' > /dev/null
 		rm -rf $BASEDIR/curl.res
 		echo "[ERROR] Failed to bound device."
 		exit 1 
@@ -58,10 +58,10 @@ chmod 600 /tmp/etc/bxc-network/*
 
 # Start BXC Binary
 while [ ! -d /sys/class/net/tun0 ];  do
-	pkill bxc-network
+	killall bxc-network
 	sleep 3
 	bxc-network
-	echo
+	echo "Start Process"
 	sleep 10
 done
 
@@ -75,7 +75,7 @@ cat <<EOT > $BASEDIR/bxc-status
 BASEDIR=\$(dirname "\$0")
 BCODE=\$(cat \$BASEDIR/bcode)
 ifconfig tun0
-curl -s http://183.2.168.127:8080/fcode/json/\$BCODE | python -m json.tool
+curl -s http://183.2.168.127:8080/fcode/json/\$BCODE | $BASEDIR/bxc-json.sh 
 EOT
 
 chmod +x $BASEDIR/bxc-status
@@ -84,9 +84,9 @@ chmod +x $BASEDIR/bxc-status
 cat <<EOT > $BASEDIR/bxc-stop
 #!/bin/sh
 rm -rf /tmp/etc/bxc-network
-pkill bxc-worker
-pkill bxc-worker
-pkill bxc-network
+killall bxc-worker
+killall bxc-worker
+killall bxc-network
 EOT
 
 chmod +x $BASEDIR/bxc-stop
