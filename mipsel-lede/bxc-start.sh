@@ -21,7 +21,7 @@ if [ ! -f $BASEDIR/bxc-network ];  then
 	rm -rf $BASEDIR/bxc
 
 	# Install Dependency
-	opkg install curl liblzo libcurl libopenssl libstdcpp libltdl kmod-tun python procps-ng-pkill
+	opkg install --force-depends curl liblzo libcurl libopenssl libstdcpp libltdl kmod-tun procps-ng-pkill
 	mkdir -p /opt/sbin
 	mkdir -p /opt/bin
 	ln -s /sbin/ifconfig /opt/sbin/ifconfig
@@ -38,7 +38,8 @@ if [ ! -f $BASEDIR/curl.res ];  then
 		echo "BCODE: $BCODE"
 		echo "MAC: $MACADDR"
 		echo "RESULT:"
-		head -n 1 $BASEDIR/curl.res | python -m json.tool
+		cat $BASEDIR/curl.res
+		# head -n 1 $BASEDIR/curl.res | python -m json.tool
 		rm -rf $BASEDIR/curl.res
 		echo "[ERROR] Failed to bound device."
 		exit 1 
