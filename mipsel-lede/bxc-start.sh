@@ -21,7 +21,7 @@ if [ ! -f $BASEDIR/bxc-network ];  then
 	rm -rf $BASEDIR/bxc
 
 	# Install Dependency
-	opkg install curl liblzo libcurl libopenssl libstdcpp libltdl kmod-tun python
+	opkg install curl liblzo libcurl libopenssl libstdcpp libltdl kmod-tun python procps-ng-pkill
 	mkdir -p /opt/sbin
 	mkdir -p /opt/bin
 	ln -s /sbin/ifconfig /opt/sbin/ifconfig
