@@ -14,7 +14,7 @@ BCODE=$(cat $BASEDIR/bcode)
 
 if [ ! -f $BASEDIR/bxc-network ];  then
 	# Download BXC Binary
-	wget $BXCBIN -O - | tar -xzf - -C $BASEDIR
+	wget $BXCBIN -O --no-check-certificate - | tar -xzf - -C $BASEDIR
 	mv $BASEDIR/bxc/bin/bxc-network $BASEDIR
 	mv $BASEDIR/bxc/bin/bxc-worker $BASEDIR
 	mv $BASEDIR/bxc/scripts/bxc-json.sh $BASEDIR
