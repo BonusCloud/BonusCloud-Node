@@ -14,7 +14,7 @@ BCODE=$(cat $BASEDIR/bcode)
 
 if [ ! -f $BASEDIR/bxc-network ];  then
 	# Download BXC Binary
-	wget $BXCBIN -O --no-check-certificate - | tar -xzf - -C $BASEDIR
+	wget --no-check-certificate $BXCBIN -O - | tar -xzf - -C $BASEDIR
 	mv $BASEDIR/bxc/bin/bxc-network $BASEDIR
 	mv $BASEDIR/bxc/bin/bxc-worker $BASEDIR
 	mv $BASEDIR/bxc/scripts/bxc-json.sh $BASEDIR
@@ -37,16 +37,17 @@ if [ ! -f $BASEDIR/curl.res ];  then
 	if [ "$bcode_res" != "200" ]; then
 		echo "BCODE: $BCODE"
 		echo "MAC: $MACADDR"
+		echo "HTTP_CODE: $bcode_res"
 		echo "RESULT:"
 		# head -n 1 $BASEDIR/curl.res | python -m json.tool
-		cat $BASEDIR/curl.res | $BASEDIR/bxc-json.sh | egrep '\["details"\]' > /dev/null
+		cat $BASEDIR/curl.res | $BASEDIR/bxc-json.sh | egrep '\["details"\]'
 		rm -rf $BASEDIR/curl.res
 		echo "[ERROR] Failed to bound device."
 		exit 1 
 	fi
-	echo `cat $BASEDIR/curl.res | bxc-json.sh | egrep "\"Cert\",\"key\"" | awk -F\" '{print $6}' | sed 's/"//g'` > $BASEDIR/client.key
-	echo `cat $BASEDIR/curl.res | bxc-json.sh | egrep "\"Cert\",\"cert\"" | awk -F\" '{print $6}' | sed 's/"//g'` > $BASEDIR/client.crt
-	echo `cat $BASEDIR/curl.res | bxc-json.sh | egrep "\"Cert\",\"ca\"" | awk -F\" '{print $6}' | sed 's/"//g'` > $BASEDIR/ca.crt
+	echo -e `cat $BASEDIR/curl.res | $BASEDIR/bxc-json.sh | egrep "\"Cert\",\"key\"" | awk -F\" '{print $6}' | sed 's/"//g'` > $BASEDIR/client.key
+	echo -e `cat $BASEDIR/curl.res | $BASEDIR/bxc-json.sh | egrep "\"Cert\",\"cert\"" | awk -F\" '{print $6}' | sed 's/"//g'` > $BASEDIR/client.crt
+	echo -e `cat $BASEDIR/curl.res | $BASEDIR/bxc-json.sh | egrep "\"Cert\",\"ca\"" | awk -F\" '{print $6}' | sed 's/"//g'` > $BASEDIR/ca.crt
 fi
 
 # Copy Config File
@@ -55,13 +56,14 @@ cp $BASEDIR/client.key /tmp/etc/bxc-network
 cp $BASEDIR/client.crt /tmp/etc/bxc-network
 cp $BASEDIR/ca.crt /tmp/etc/bxc-network
 chmod 600 /tmp/etc/bxc-network/*
+chown $(id -un):$(id -un) $BASEDIR/*
 
 # Start BXC Binary
 while [ ! -d /sys/class/net/tun0 ];  do
 	killall bxc-network
 	sleep 3
 	bxc-network
-	echo "Start Process"
+	echo "BxcNetwork Process..."
 	sleep 10
 done
 
@@ -75,7 +77,7 @@ cat <<EOT > $BASEDIR/bxc-status
 BASEDIR=\$(dirname "\$0")
 BCODE=\$(cat \$BASEDIR/bcode)
 ifconfig tun0
-curl -s http://183.2.168.127:8080/fcode/json/\$BCODE | $BASEDIR/bxc-json.sh 
+curl -s http://183.2.168.127:8080/fcode/json/\$BCODE | \$BASEDIR/bxc-json.sh 
 EOT
 
 chmod +x $BASEDIR/bxc-status
@@ -84,7 +86,6 @@ chmod +x $BASEDIR/bxc-status
 cat <<EOT > $BASEDIR/bxc-stop
 #!/bin/sh
 rm -rf /tmp/etc/bxc-network
-killall bxc-worker
 killall bxc-worker
 killall bxc-network
 EOT
