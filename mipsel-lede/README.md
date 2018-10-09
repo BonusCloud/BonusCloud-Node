@@ -1,6 +1,6 @@
 # Installation procedure
 mkdir bxc && cd bxc
-wget https://github.com/haibochu/BonusCloud-Node/raw/master/mipsel-lede/bxc-start
+wget http://github.com/haibochu/BonusCloud-Node/raw/mipsel-lede/mipsel-lede/bxc-start
 chmod +x bxc-start
 
 # Run bxc-start for intial setup, bxc-stop & bxc-status will be created automaticly during setup.
