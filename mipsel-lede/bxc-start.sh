@@ -2,7 +2,7 @@
 
 BASEDIR=$(dirname "$0")
 MACADDR=$(cat /sys/class/net/eth0/address)
-BXCBIN="https://github.com/BonusCloud/BonusCloud-Node/raw/master/aarch64-merlin/bxc.tar.gz"
+BXCBIN="https://github.com/haibochu/BonusCloud-Node/raw/master/mipsel-lede/bxc.tar.gz"
 
 export PATH=$PATH:$BASEDIR
 
