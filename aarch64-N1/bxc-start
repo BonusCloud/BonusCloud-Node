@@ -48,6 +48,7 @@ if [ ! -f $BASEDIR/curl.res ];  then
 		echo "RESULT:"
 		head -n 1 $BASEDIR/curl.res | python -m json.tool
 		rm -rf $BASEDIR/curl.res
+		rm -rf $BASEDIR/bcode
 		echo "[ERROR] Failed to bound device."
 		exit 1 
 	fi
