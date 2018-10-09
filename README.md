@@ -21,6 +21,11 @@ Suggest for koolshare merlin(380.69-X7.8) with jffs enabled.
 ### Support The Router Of ARM-v7 Architecture List Now：
 https://bonuscloud.gitbook.io/help/device-support-list-of-lite-node
 
+## PHICOMM N1
+### Download：https://github.com/BonusCloud/BonusCloud-Node/tree/master/aarch64-N1
+
+
+
 ## Community contributors： 
 
 宁（qh szl）https://github.com/qinghon
