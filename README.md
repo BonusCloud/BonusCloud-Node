@@ -24,6 +24,9 @@ https://bonuscloud.gitbook.io/help/device-support-list-of-lite-node
 ## PHICOMM N1
 ### Download：https://github.com/BonusCloud/BonusCloud-Node/tree/master/aarch64-N1
 
+Running in Ubuntu (Armbian).
+
+The recommended mirror file is：Armbian_5.44_S9xxx_Ubuntu_bionic_3.14.29_server_20180729.img.xz
 
 
 ## Community contributors： 
