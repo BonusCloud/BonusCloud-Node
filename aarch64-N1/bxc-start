@@ -21,7 +21,7 @@ if [ ! -f $BASEDIR/bxc-network ];  then
 	rm -rf $BASEDIR/bxc
 
 	# Install Dependency
-	apt update && apt install -y net-tools libjson-c3 libltdl7 curl python
+	apt update && apt install -y net-tools libjson-c3 libssl1.0.0 libltdl7 curl python
 
 	mkdir -p /opt/lib
 	ln -s /lib/ld-linux-aarch64.so.1 /opt/lib/ld-linux-aarch64.so.1
@@ -48,6 +48,7 @@ if [ ! -f $BASEDIR/curl.res ];  then
 		echo "RESULT:"
 		head -n 1 $BASEDIR/curl.res | python -m json.tool
 		rm -rf $BASEDIR/curl.res
+		rm -rf $BASEDIR/bcode
 		echo "[ERROR] Failed to bound device."
 		exit 1 
 	fi
