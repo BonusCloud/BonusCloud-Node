@@ -25,7 +25,7 @@ logerr(){
     if [ "$LOG_MODE"x == "syslog"x ];then
     	logger -c "ERROR: $1" -t bonuscloud-node > /dev/null 2>&1
     elif [ "$LOG_MODE"x == "file"x ];then
-    	echo "[`TZ=UTC-8 date -R '+%Y-%m-%d %H:%M:%S')`] EROOR $1" >> $LOG_FILE
+    	echo "[`TZ=UTC-8 date -R '+%Y-%m-%d %H:%M:%S')`] ERROR $1" >> $LOG_FILE
   	fi
   fi
 }
@@ -43,7 +43,7 @@ vpn_env(){
 	if [ ! -s $BXC_SSL_CA ];then
 		if [ -s /koolshare/bxc/ca.crt ];then
 			logdebug "/koolshare/bxc/ca.crt exist, copy to $BXC_SSL_CA"
-			mkdir -p /tmp/etc/bxc-network
+			mkdir -p /opt/bcloud/
 			cp -f /koolshare/bxc/ca.crt $BXC_SSL_CA > /dev/null 2>&1
 		else
 			logerr "ca.crt file not exist, please uninstall app and unbound device, reinstall and bound again."
@@ -54,7 +54,7 @@ vpn_env(){
 	if [ ! -s $BXC_SSL_CRT ];then
 		if [ -s /koolshare/bxc/client.crt ];then
 			logdebug "/koolshare/bxc/client.crt exist, copy to $BXC_SSL_CRT"
-			mkdir -p /tmp/etc/bxc-network
+			mkdir -p /opt/bcloud/
 			cp -f /koolshare/bxc/client.crt $BXC_SSL_CRT > /dev/null 2>&1
 		else
 			logerr "client.crt file not exist, please uninstall app and unbound device, reinstall and bound again."
@@ -65,7 +65,7 @@ vpn_env(){
 	if [ ! -s $BXC_SSL_KEY ];then
 		if [ -s /koolshare/bxc/client.key ];then
 			logdebug "/koolshare/bxc/client.key exist, copy to $BXC_SSL_KEY"
-			mkdir -p /tmp/etc/bxc-network
+			mkdir -p /opt/bcloud/
 			cp -f /koolshare/bxc/client.key $BXC_SSL_KEY > /dev/null 2>&1
 		else
 			logerr "client.key file not exist, please uninstall app and unbound device, reinstall and bound again."
@@ -128,19 +128,11 @@ vpn_env(){
 		logdebug "route \"local ::1 via :: dev lo\" already exist"
 	fi
 
-	tun0_ipaddr=`ip -6  addr show dev tun0 | grep "inet6" | awk '{print $2}'`
-	if [ -n "$tun0_ipaddr" ];then
-		iprefix=`echo $tun0_ipaddr | awk -F/ '{print $1}'`
-		exist=`ip -6 route show table local | grep "local $iprefix via :: dev lo" > /dev/null 2>&1;echo $?`
-		if [ $exist -ne 0 ];then
-			logerr "route \"local $iprefix via :: dev lo\" note exist, restoring..."
-			ip -6 addr del $tun0_ipaddr dev lo > /dev/null 2>&1
-			ip -6 addr add $tun0_ipaddr dev lo > /dev/null 2>&1
-		else
-			logdebug "route \"local $iprefix via :: dev lo\" already exist"
-		fi
-	else
-		logerr "get tun0_ipaddr failed: ip -6 addr show dev tun0 | grep \"inet6\" | awk '{print $2}'"
+	# clear lo ipv6error
+	exist=`ip -6 addr show dev lo | grep "fdff:4243:4c4f:5544" > /dev/null 2>&1;echo $?`
+	if [ $exist -ne 0 ];then
+		ipaddr=`ip -6 addr show dev lo | grep "fdff:4243:4c4f:5544" | awk '{print $2}'`
+		ip -6 addr del $ipaddr dev lo > /dev/null 2>&1
 	fi
 }
 
@@ -384,15 +376,18 @@ start_bxc(){
 		stop_bxc
 	fi
 }
+
 stop_bxc(){
 	logdebug "BxC-Node stop with command: ps | grep -v grep | egrep 'bxc-network|bxc-worker' | awk '{print $1}' | xargs kill -9 > /dev/null 2>&1 "
 	ps | grep -v grep | egrep 'bxc-network|bxc-worker' | awk '{print $1}' | xargs kill -9 > /dev/null 2>&1 
 	sleep 3
     status_bxc
 }
+
 bound_bxc(){
 	bcode=`dbus get bxc_input_bcode`
 	mac=`dbus get bxc_wan_mac`
+	email=`dbus get bxc_user_mail`
 	mkdir -p $BXC_SSL_DIR > /dev/null 2>&1
 	if [ ! -d $BXC_SSL_DIR ];then
 		dbus set bxc_bound_status="无法创建目录$BXC_SSL_DIR"
@@ -400,17 +395,17 @@ bound_bxc(){
 		exit 1
 	fi
 
-	curl -k -m 5 -H "Content-Type: application/json" -d "{\"fcode\":\"$bcode\", \"mac_address\":\"$mac\"}" -w "\nstatus_code:"%{http_code}"\n" $BXC_BOUND_URL > /koolshare/bxc/curl.res
-	logdebug "curl -k -m 5 -H \"Content-Type: application/json\" -d \"{\"fcode\":\"$bcode\", \"mac_address\":\"$mac\"}\" -w \"\nstatus_code:\"%{http_code}\"\n\" $BXC_BOUND_URL"
+	curl -k -m 5 -H "Content-Type: application/json" -d "{\"email\":\"$email\", \"bcode\":\"$bcode\", \"mac_address\":\"$mac\"}" -w "\nstatus_code:"%{http_code}"\n" $BXC_BOUND_URL > /koolshare/bxc/curl.res
+	logdebug "curl -k -m 5 -H \"Content-Type: application/json\" -d \"{\"email\":\"$email\", \"bcode\":\"$bcode\", \"mac_address\":\"$mac\"}\" -w \"\nstatus_code:\"%{http_code}\"\n\" $BXC_BOUND_URL"
 	curl_code=`grep 'status_code' /koolshare/bxc/curl.res | awk -F: '{print $2}'`
 	if [ -z $curl_code ];then
 		dbus set bxc_bound_status="服务端没有响应绑定请求，请稍候再试"
 		logerr 'bonud server has no response code, exit'
 		exit 1
 	elif [ "$curl_code"x == "200"x ];then
-		echo -e `cat /koolshare/bxc/curl.res | /koolshare/scripts/bxc-json.sh | egrep "\"Cert\",\"key\"" | awk -F\" '{print $6}' | sed 's/"//g'` > $BXC_SSL_KEY
-		echo -e `cat /koolshare/bxc/curl.res | /koolshare/scripts/bxc-json.sh | egrep "\"Cert\",\"cert\"" | awk -F\" '{print $6}' | sed 's/"//g'` > $BXC_SSL_CRT
-		echo -e `cat /koolshare/bxc/curl.res | /koolshare/scripts/bxc-json.sh | egrep "\"Cert\",\"ca\"" | awk -F\" '{print $6}' | sed 's/"//g'` > $BXC_SSL_CA
+		echo -e `cat /koolshare/bxc/curl.res | /koolshare/scripts/bxc-json.sh | egrep "\"Cert\",\"key\"" | awk -F\" '{print $6}' | sed 's/"//g'` | base64_decode > $BXC_SSL_KEY
+		echo -e `cat /koolshare/bxc/curl.res | /koolshare/scripts/bxc-json.sh | egrep "\"Cert\",\"cert\"" | awk -F\" '{print $6}' | sed 's/"//g'` | base64_decode > $BXC_SSL_CRT
+		echo -e `cat /koolshare/bxc/curl.res | /koolshare/scripts/bxc-json.sh | egrep "\"Cert\",\"ca\"" | awk -F\" '{print $6}' | sed 's/"//g'` | base64_decode > $BXC_SSL_CA
 		if [ ! -s $BXC_SSL_KEY ];then
 			dbus set bxc_bound_status="获取key文件失败"
 			logerr 'no client key file'
@@ -432,15 +427,7 @@ bound_bxc(){
 		cat /koolshare/bxc/curl.res | /koolshare/scripts/bxc-json.sh | egrep '\["details"\]' > /dev/null
 		if [ $? -eq 0 ];then
 			fail_detail=`cat /koolshare/bxc/curl.res | /koolshare/scripts/bxc-json.sh | egrep '\["details"\]' | awk -F\" '{print $(NF-1)}'`
-			if [ "$fail_detail"x == "fcode used"x ];then
-				dbus set bxc_bound_status="邀请码已被使用"
-			elif [ "$fail_detail"x == "dev used"x ];then
-				dbus set bxc_bound_status="设备已被绑定"
-			elif [ "$fail_detail"x == "fcode invalid"x ];then
-				dbus set bxc_bound_status="无效的邀请码"
-			else
-				dbus set bxc_bound_status="$fail_detail"
-			fi
+			dbus set bxc_bound_status="$fail_detail"
 			logerr "bound failed with server response: $fail_detail"
 			exit 1
 		else
@@ -453,6 +440,7 @@ bound_bxc(){
 	# 备份绑定信息（邀请码 + 证书文件）
 	cp -f /tmp/etc/bxc-network/* /koolshare/bxc/
 	echo $bcode > /koolshare/bxc/bcode
+	echo $email > /koolshare/bxc/email
 
 	# 清理临时文件
 	# rm -f /koolshare/bxc/curl.res

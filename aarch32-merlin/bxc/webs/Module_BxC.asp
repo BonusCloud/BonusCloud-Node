@@ -74,12 +74,12 @@
 			function init_show() {
 				var bxc_bcode = dbus_read("bxc_bcode");
 				if (typeof(bxc_bcode) != 'undefined' && bxc_bcode != '') {
-					/* 邀请码已经存在 */
+					/* BCode已经存在 */
 					E("bxc_bound").style.display = "none";
 					E("bxc_status").style.display = "";
 					bxc_show_status();
 				} else {
-					/* 邀请码不存在 */
+					/* BCode不存在 */
 					E("bxc_bound").style.display = "";
 					E("bxc_status").style.display = "none";
 					$("#bound_mac").html(bxc_db["bxc_wan_mac"]);
@@ -96,75 +96,57 @@
 				if($('.show-btn1').hasClass("active")){
 					E("tablet_1").style.display = "";
 					E("tablet_2").style.display = "none";
-					E("tablet_3").style.display = "none";
 				}else if($('.show-btn2').hasClass("active")){
 					E("tablet_1").style.display = "none";
 					E("tablet_2").style.display = "";
-					E("tablet_3").style.display = "none";
-				}else if($('.show-btn3').hasClass("active")){
-					E("tablet_1").style.display = "none";
-					E("tablet_2").style.display = "none";
-					E("tablet_3").style.display = "";
 				}else{
 					$('.show-btn1').addClass('active');
 					$('.show-btn2').removeClass('active');
-					$('.show-btn3').removeClass('active');
 					E("tablet_1").style.display = "";
 					E("tablet_2").style.display = "none";
-					E("tablet_3").style.display = "none";
 				}
 				$(".show-btn1").click(
 				function() {
 					$('.show-btn1').addClass('active');
 					$('.show-btn2').removeClass('active');
-					$('.show-btn3').removeClass('active');
 					E("tablet_1").style.display = "";
 					E("tablet_2").style.display = "none";
-					E("tablet_3").style.display = "none";
 				});
 				$(".show-btn2").click(
 				function() {
-					setTimeout("online_query();", 200);
-					$('.show-btn1').removeClass('active');
-					$('.show-btn2').addClass('active');
-					$('.show-btn3').removeClass('active');
-					E("tablet_1").style.display = "none";
-					E("tablet_2").style.display = "";
-					E("tablet_3").style.display = "none";
-				});
-				$(".show-btn3").click(
-				function() {
 					setTimeout("get_log();", 200);
 					$('.show-btn1').removeClass('active');
-					$('.show-btn2').removeClass('active');
-					$('.show-btn3').addClass('active');
+					$('.show-btn2').addClass('active');
 					E("tablet_1").style.display = "none";
-					E("tablet_2").style.display = "none";
-					E("tablet_3").style.display = "";
+					E("tablet_2").style.display = "";
 				});
 			}
 
 			function bxc_bound_bcode() {
 				var bcode = $("#bxc_bcode").val();
+				var email = $("#user_email").val();
 				if (typeof(bcode) == 'undefined' || bcode == "") {
-					bxc_bound_msg('请输入邀请码！');
+					bxc_bound_msg('请输入BCode！');
 				} else if (!bcode_islegal(bcode)) {
-					bxc_bound_msg('邀请码<font color="#FF9900">"'+bcode+'"</font>格式不正确');
+					bxc_bound_msg('BCode<font color="#FF9900">"'+bcode+'"</font>格式不正确');
+				} else if (typeof(email) == 'undefined' || email == "") {
+					bxc_bound_msg('请输入用户邮箱信息!');
 				} else {
-					bound_bcode(bcode);
+					bound_bcode(bcode, email);
 				}
 			}
 
 			function bcode_islegal(bcode) {
-				/* 判断邀请码的内容合法性 */
-				var pattern = RegExp("^[A-z0-9]{8}-[A-z0-9]{4}-[A-z0-9]{4}-[A-z0-9]{4}-[A-z0-9]{12}$");
+				/* 判断BCode的内容合法性 */
+				var pattern = RegExp("^[0-9]{4}-[A-z0-9]{8}-[A-z0-9]{4}-[A-z0-9]{4}-[A-z0-9]{4}-[A-z0-9]{12}$");
 				return pattern.test(bcode);
 			}
 
-			function bound_bcode(bcode) {
-				/* 根据邀请码和设备WAN口MAC地址向服务端进行绑定，并将邀请码写入DBUS */
+			function bound_bcode(bcode, email) {
+				/* 根据BCode和设备WAN口MAC地址向服务端进行绑定，并将BCode写入DBUS */
 				var wan_mac = dbus_read("bxc_wan_mac");
 				dbus_write("bxc_input_bcode", bcode);
+				dbus_write("bxc_user_mail", email);
 				dbus_write("bxc_bound_status", "init");
 				bxc_option("bound");
 				bxc_bound_msg("校验通过，正在申请绑定...");
@@ -208,6 +190,10 @@
 				var bxc_bcode = dbus_read("bxc_bcode");
 				if (bxc_bcode != "") {
 					E("bxc_bcode_show").innerHTML = bxc_bcode;
+				}
+				var bxc_user_mail = dbus_read("bxc_user_mail");
+				if (bxc_user_mail != "") {
+					E("bxc_user_mail").innerHTML = bxc_user_mail;
 				}
 
 				var	bxc_onboot = dbus_read("bxc_onboot");
@@ -405,50 +391,8 @@
 			}
 
 			function bxc_bound_msg(msg) {
-				$('#bound_msg').html('<h4><font color="#FF9900">【提示】</font></h4><p>'+msg+'</p><p>您可以前往<a href="http://bonuscloud.io"><u><em>BonusCloud</em></u></a>获取邀请码，进行设备绑定！</p>');
+				$('#bound_msg').html('<h4><font color="#FF9900">【提示】</font></h4><p>'+msg+'</p><p>您可以前往<a href="http://bonuscloud.io"><u><em>BonusCloud</em></u></a>获取BCode，进行设备绑定！</p>');
 				E("bound_warning").style.display = "";
-			}
-
-
-			function online_query(){
-				var bcode = dbus_read("bxc_bcode");
-				if (typeof(bcode) !== 'undefined' && bcode !== "") {
-					E("online_msg").style.display="none";
-					E("online_table").style.display="";
-					$.ajax({
-						url: "http://183.2.168.127:8080/fcode/json/" + bcode,
-						type: "GET",
-						dataType: "json",
-						async: false,
-						success: function(data) {
-							if (data["infos"].length > 72) {
-								res = data["infos"].slice(-72);
-							} else {
-								res = data["infos"];
-							}
-							$("#online_tbody").empty();
-							tableRef = E("online_tbody");
-							for(var i=res.length-1; i>=0; i--){
-								var row = tableRef.insertRow(res.length-i-1);
-								var cell1 = row.insertCell(0);
-								cell1.align="center";
-								cell1.innerHTML = res[i]["fcode"];
-								var cell2 = row.insertCell(1);
-								cell2.align="center";
-								cell2.innerHTML = res[i]["online_contribution"];
-								var cell3 = row.insertCell(2);
-								cell3.align="center";
-								cell3.innerHTML = res[i]["task_contribution"];
-								var cell4 = row.insertCell(3);
-								cell4.align="center";
-								cell4.innerHTML = res[i]["time"];
-							}
-						}
-					})
-				} else {
-					E("online_table").style.display="none";
-					E("online_msg").style.display="";
-				}
 			}
 
 			function get_log(refresh) {
@@ -530,8 +474,7 @@
 														<tr width="235px">
 															<td colspan="4" cellpadding="0" cellspacing="0" style="padding:0" border="1" bordercolor="#000">
 																<input id="show_btn1" class="show-btn1" style="cursor:pointer" type="button" value="节点管理" />
-																<input id="show_btn2" class="show-btn2" style="cursor:pointer" type="button" value="在线统计" />
-																<input id="show_btn3" class="show-btn3" style="cursor:pointer" type="button" value="日志信息" />
+																<input id="show_btn2" class="show-btn2" style="cursor:pointer" type="button" value="日志信息" />
 															</td>
 														</tr>
 													</table>
@@ -545,7 +488,7 @@
 														<table style="margin:10px 0px 0px 0px;" width="100%" border="1" align="center" cellpadding="4" cellspacing="0" bordercolor="#6b8fa3" class="FormTable" id="bxc_detail_table">
 															<thead>
 															<tr>
-																<td colspan="2">绑定邀请码</td>
+																<td colspan="2">绑定BCode</td>
 															</tr>
 															</thead>
 															<tr>
@@ -557,9 +500,15 @@
 																</td>
 															</tr>
 															<tr>
-																<th width="35%">邀请码</th>
+																<th width="35%">BCode</th>
 																<td>
-																	<input  class="input_ss_table" style="width:auto;" size="40"  id="bxc_bcode" placeholder="请输入邀请码"/>
+																	<input  class="input_ss_table" style="width:auto;" size="40"  id="bxc_bcode" placeholder="请输入BCode"/>
+																</td>
+															</tr>
+															<tr>
+																<th width="35%">用户账号</th>
+																<td>
+																	<input  class="input_ss_table" style="width:auto;" size="40"  id="user_email" placeholder="请输入用户邮箱"/>
 																</td>
 															</tr>
 															<tr>
@@ -640,7 +589,15 @@
 																</td>
 															</tr>
 															<tr>
-															    <th width="20%">已绑定邀请码</th>
+															    <th width="20%">用户邮箱</th>
+																<td>
+																	<a>
+																		<span id="bxc_user_mail" >未知</span>
+																	</a>
+																</td>
+															</tr>
+															<tr>
+															    <th width="20%">已绑定BCode</th>
 																<td>
 																	<a>
 																		<span id="bxc_bcode_show" >未知</span>
@@ -682,12 +639,12 @@
 													</div>
 												</div>
 												
-												<div id="tablet_2" style="display: none;">
+<!-- 												<div id="tablet_2" style="display: none;">
 													<br/>
 													<table id="online_table" border="1" width="100%" style="display: none;">
 														<thead>
 															<tr>
-																<th width="40%">邀请码</th>
+																<th width="40%">BCode</th>
 																<th width="20%">网络在线（分钟）</th>
 																<th width="20%">任务分数</th>
 																<th width="20%">时间段（小时）</th>
@@ -697,11 +654,11 @@
 														</tbody>
 													</table>
 													<div id="online_msg" style="display: none;background-color:#445053;padding:10px;width:95%;font-size:12px;">
-									 					<h4><font color="#FF9900">【提示】</font></h4><p>该设备尚未绑定邀请码！</p><p>您可以前往<a href="http://bonuscloud.io"><u><em>BonusCloud</em></u></a>获取邀请码，进行设备绑定！</p>
+									 					<h4><font color="#FF9900">【提示】</font></h4><p>该设备尚未绑定BCode！</p><p>您可以前往<a href="http://bonuscloud.io"><u><em>BonusCloud</em></u></a>获取BCode，进行设备绑定！</p>
 									 				</div>
-												</div>
+												</div> -->
 
-												<div id="tablet_3" style="display: none;">
+												<div id="tablet_2" style="display: none;">
 													<br/>
 													<div id="log_content" style="margin-top:-1px;display:block;overflow:hidden;outline: 1px solid #222;">
 														<textarea cols="63" rows="36" wrap="on" readonly="readonly" id="log_content1" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea>
