@@ -1,7 +1,7 @@
 # BonusCloud-Node
 
 ## ARM v7
-### Download：https://github.com/BonusCloud/BonusCloud-Node/blob/master/aarch32-merlin/bxc.tar.gz
+### Download：https://github.com/BonusCloud/BonusCloud-Node/raw/master/aarch32-merlin/bxc.tar.gz
 
 Arm v7 Lite Node running in Merlin with koolshare.
 
