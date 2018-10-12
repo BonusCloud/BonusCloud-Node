@@ -16,7 +16,7 @@ logerr(){
     if [ "$LOG_MODE"x == "syslog"x ];then
     	logger -c "ERROR: $1" -t bonuscloud-node > /dev/null 2>&1
     elif [ "$LOG_MODE"x == "file"x ];then
-    	echo "[`TZ=UTC-8 date -R '+%Y-%m-%d %H:%M:%S')`] EROOR $1" >> $LOG_FILE
+    	echo "[`TZ=UTC-8 date -R '+%Y-%m-%d %H:%M:%S')`] ERROR $1" >> $LOG_FILE
   	fi
   fi
 }
@@ -141,13 +141,13 @@ check_env(){
 	bxc_ipaddr=`ip -6  addr show dev $bxc_intf | grep "inet6" | awk '{print $2}'`
 	if [ -n "$bxc_ipaddr" ];then
 		iprefix=`echo $bxc_ipaddr | awk -F/ '{print $1}'`
-		exist=`ip -6 route show table local | grep "local $iprefix via :: dev $bxc_intf" > /dev/null 2>&1;echo $?`
+		exist=`ip -6 route show table local | grep "local $iprefix via :: dev lo" > /dev/null 2>&1;echo $?`
 		if [ $exist -ne 0 ];then
-			logerr "route \"local $iprefix via :: dev $bxc_intf\" note exist, restoring..."
+			logerr "route \"local $iprefix via :: dev lo\" note exist, restoring..."
 			ip -6 addr del $bxc_ipaddr dev $bxc_intf > /dev/null 2>&1
 			ip -6 addr add $bxc_ipaddr dev $bxc_intf > /dev/null 2>&1
 		else
-			logdebug "route \"local $iprefix via :: dev $bxc_intf\" already exist"
+			logdebug "route \"local $iprefix via :: dev lo\" already exist"
 		fi
 	else
 		logerr "get bxc_ipaddr failed: ip -6 addr show dev $bxc_intf | grep \"inet6\" | awk '{print $2}'"

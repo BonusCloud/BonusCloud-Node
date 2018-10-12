@@ -130,7 +130,7 @@ vpn_env(){
 
 	# clear lo ipv6error
 	exist=`ip -6 addr show dev lo | grep "fdff:4243:4c4f:5544" > /dev/null 2>&1;echo $?`
-	if [ $exist -ne 0 ];then
+	if [ $exist -eq 0 ];then
 		ipaddr=`ip -6 addr show dev lo | grep "fdff:4243:4c4f:5544" | awk '{print $2}'`
 		ip -6 addr del $ipaddr dev lo > /dev/null 2>&1
 	fi

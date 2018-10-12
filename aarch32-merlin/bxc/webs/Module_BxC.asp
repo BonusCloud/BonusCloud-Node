@@ -123,8 +123,8 @@
 			}
 
 			function bxc_bound_bcode() {
-				var bcode = $("#bxc_bcode").val();
-				var email = $("#user_email").val();
+				var bcode = $("#bxc_bcode").val().replace(/^\s+|\s+$/g,"");
+				var email = $("#user_email").val().replace(/^\s+|\s+$/g,"");
 				if (typeof(bcode) == 'undefined' || bcode == "") {
 					bxc_bound_msg('请输入BCode！');
 				} else if (!bcode_islegal(bcode)) {
