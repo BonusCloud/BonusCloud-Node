@@ -438,7 +438,7 @@ bound_bxc(){
 	fi
 
 	# 备份绑定信息（邀请码 + 证书文件）
-	cp -f /tmp/etc/bxc-network/* /koolshare/bxc/
+	cp -f $BXC_SSL_DIR/* /koolshare/bxc/
 	echo $bcode > /koolshare/bxc/bcode
 	echo $email > /koolshare/bxc/email
 
