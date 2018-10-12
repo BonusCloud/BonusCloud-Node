@@ -136,7 +136,6 @@ if [ -d /koolshare/bxc ];then
 	cp -rf /tmp/bxc/bxc/* /koolshare/bxc/
 	cp -rf /tmp/bxc/install.sh /koolshare/scripts/bxc_install.sh
 	cp -rf /tmp/bxc/uninstall.sh /koolshare/scripts/uninstall_bxc.sh
-	mkdir -p /opt/bcloud/
 else
 	echo_date 设备koolshare目录无法写入，退出安装！
 	exit 1
