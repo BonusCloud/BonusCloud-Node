@@ -152,6 +152,14 @@ check_env(){
 	else
 		logerr "get bxc_ipaddr failed: ip -6 addr show dev $bxc_intf | grep \"inet6\" | awk '{print $2}'"
 	fi
+
+	exist=`ip -6 route show  | grep "fdff:4243:4c4f:5544::/64 dev $bxc_intf" > /dev/null 2>&1;echo $?`
+	if [ $exist -ne 0 ];then
+		logerr "route fdff:4243:4c4f:5544::/64 dev $bxc_intf not exist, restoring..."
+		ip -6 route add fdff:4243:4c4f:5544::/64 dev $bxc_intf > /dev/null 2>&1
+	else
+		logdebug "route fdff:4243:4c4f:5544::/64 dev $bxc_intf already exist"
+	fi
 }
 
 check_iptables() {
