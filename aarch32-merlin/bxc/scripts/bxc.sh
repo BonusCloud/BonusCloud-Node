@@ -395,12 +395,12 @@ bound_bxc(){
 		exit 1
 	fi
 
-	curl -k -m 5 -H "Content-Type: application/json" -d "{\"email\":\"$email\", \"bcode\":\"$bcode\", \"mac_address\":\"$mac\"}" -w "\nstatus_code:"%{http_code}"\n" $BXC_BOUND_URL > /koolshare/bxc/curl.res
-	logdebug "curl -k -m 5 -H \"Content-Type: application/json\" -d \"{\"email\":\"$email\", \"bcode\":\"$bcode\", \"mac_address\":\"$mac\"}\" -w \"\nstatus_code:\"%{http_code}\"\n\" $BXC_BOUND_URL"
+	curl -k -m 10 -H "Content-Type: application/json" -d "{\"email\":\"$email\", \"bcode\":\"$bcode\", \"mac_address\":\"$mac\"}" -w "\nstatus_code:"%{http_code}"\n" $BXC_BOUND_URL > /koolshare/bxc/curl.res
+	logdebug "curl -k -m 10 -H \"Content-Type: application/json\" -d \"{\"email\":\"$email\", \"bcode\":\"$bcode\", \"mac_address\":\"$mac\"}\" -w \"\nstatus_code:\"%{http_code}\"\n\" $BXC_BOUND_URL"
 	curl_code=`grep 'status_code' /koolshare/bxc/curl.res | awk -F: '{print $2}'`
 	if [ -z $curl_code ];then
-		dbus set bxc_bound_status="服务端没有响应绑定请求，请稍候再试"
-		logerr 'bonud server has no response code, exit'
+		dbus set bxc_bound_status="绑定请求超时，请确认网络正常后重试"
+		logerr "Server has no response, exit"
 		exit 1
 	elif [ "$curl_code"x == "200"x ];then
 		echo -e `cat /koolshare/bxc/curl.res | /koolshare/scripts/bxc-json.sh | egrep "\"Cert\",\"key\"" | awk -F\" '{print $6}' | sed 's/"//g'` | base64_decode > $BXC_SSL_KEY
@@ -431,7 +431,7 @@ bound_bxc(){
 			logerr "bound failed with server response: $fail_detail"
 			exit 1
 		else
-			dbus set bxc_bound_status="服务端没有响应绑定请求，请稍候再试"
+			dbus set bxc_bound_status="绑定请求超时，请确认网络正常后重试"
 			logerr "Server response code: $curl_code, please check /koolshare/bxc/curl.res"
 			exit 1
 		fi

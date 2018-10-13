@@ -146,8 +146,8 @@ fi
 # 如果本地存有邀请码，可以加载使用
 if [ -s /koolshare/bxc/bcode ];then
 	bcode=`cat /koolshare/bxc/bcode`
-	if [ -s /koolshare/bxc/mail ];then
-		mail=`cat /koolshare/bxc/mail`
+	if [ -s /koolshare/bxc/email ];then
+		mail=`cat /koolshare/bxc/email`
 		dbus set bxc_user_mail="$mail"
 	fi
 	dbus set bxc_bcode="$bcode"

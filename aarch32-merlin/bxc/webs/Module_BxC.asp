@@ -150,7 +150,7 @@
 				dbus_write("bxc_bound_status", "init");
 				bxc_option("bound");
 				bxc_bound_msg("校验通过，正在申请绑定...");
-				var tryTime = 8;
+				var tryTime = 12;
 				var interval = setInterval(function(){
 					console.log('bound', tryTime, dbus_read('bxc_bound_status'));
 					tryTime--;
