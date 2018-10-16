@@ -24,7 +24,7 @@ BXC_INFO_LOC="$BXC_SSL_DIR/info"
 BXC_EMAIL_LOC="$BXC_SSL_DIR/email"
 BXC_BCODE_LOC="$BXC_SSL_DIR/bcode"
 
-BXC_VER="0.2.2-2n"
+BXC_VER="0.2.2-3n"
 BXC_INFO=$(cat $BXC_INFO_LOC) >/dev/null 2>&1
 BXC_EMAIL=$(cat $BXC_EMAIL_LOC) >/dev/null 2>&1
 BXC_BCODE=$(cat $BXC_BCODE_LOC) >/dev/null 2>&1
