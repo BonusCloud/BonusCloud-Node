@@ -33,4 +33,8 @@ The recommended mirror file is：Armbian_5.44_S9xxx_Ubuntu_bionic_3.14.29_server
 
 宁（qh szl）https://github.com/qinghon
 
-Betterman  https://github.com/bettermanbao For PHICOMM K2 and PHICOMM N1
+Betterman（Allen Key）  https://github.com/bettermanbao For PHICOMM K2 and PHICOMM N1
+
+枫 https://github.com/haibochu For Openwrt and Lede with MIPS and ARM
+
+Hikaru Chang https://github.com/hikaruchang For Openwrt with ARM
