@@ -10,7 +10,8 @@ BXC_NETWORK="$BASEDIR/bxc-network"
 BXC_WORKER="$BASEDIR/bxc-worker"
 BXC_JSON="$BASEDIR/bxc-json.sh"
 
-BXC_BIN="https://github.com/BonusCloud/BonusCloud-Node/raw/master/aarch32-merlin/bxc.tar.gz"
+# BXC_BIN="https://github.com/bettermanbao/BonusCloud-Node/raw/aarch64-N1/aarch64-N1/bxc_aarch64_0.2.2.tgz"
+BXC_BIN="https://github.com/BonusCloud/BonusCloud-Node/raw/master/aarch64-N1/bxc_aarch64_0.2.2.tgz"
 BXC_BOUND_URL="https://console.bonuscloud.io/api/web/devices/bind/"
 BXC_REPORT_URL="https://bxcvenus.com/idb/dev"
 
@@ -23,7 +24,7 @@ BXC_INFO_LOC="$BXC_SSL_DIR/info"
 BXC_EMAIL_LOC="$BXC_SSL_DIR/email"
 BXC_BCODE_LOC="$BXC_SSL_DIR/bcode"
 
-BXC_VER="0.2.2-1n"
+BXC_VER="0.2.2-2n"
 BXC_INFO=$(cat $BXC_INFO_LOC) >/dev/null 2>&1
 BXC_EMAIL=$(cat $BXC_EMAIL_LOC) >/dev/null 2>&1
 BXC_BCODE=$(cat $BXC_BCODE_LOC) >/dev/null 2>&1
@@ -35,10 +36,6 @@ func_initial_setup()
 
 	# Download BXC Binary
 	wget $BXC_BIN -O - | tar -xzf - -C $BASEDIR
-	mv $BASEDIR/bxc/bin/bxc-network $BASEDIR
-	mv $BASEDIR/bxc/bin/bxc-worker $BASEDIR
-	mv $BASEDIR/bxc/scripts/bxc-json.sh $BASEDIR
-	rm -rf $BASEDIR/bxc
 
 	# Install Dependency
 	apt update && apt install -y net-tools libjson-c3 libltdl7 curl
@@ -170,7 +167,7 @@ report)
 	func_info_report
 	;;
 *)
-	echo "Usage: $0 {init|start|stop}"
+	echo "Usage: $0 {init|start|stop|report}"
 	exit 1
 	;;
 esac
