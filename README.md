@@ -33,4 +33,4 @@ The recommended mirror file is：Armbian_5.44_S9xxx_Ubuntu_bionic_3.14.29_server
 
 宁（qh szl）https://github.com/qinghon
 
-Betterman  https://github.com/bettermanbao
+Betterman  https://github.com/bettermanbao For PHICOMM K2 and PHICOMM N1
