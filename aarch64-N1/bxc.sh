@@ -38,7 +38,7 @@ func_initial_setup()
 	wget $BXC_BIN -O - | tar -xzf - -C $BASEDIR
 
 	# Install Dependency
-	apt update && apt install -y net-tools libjson-c3 libltdl7 curl
+	apt update && apt install -y net-tools libjson-c3 libltdl7 libssl1.0.0 curl
 
 	mkdir -p /opt/lib
 	ln -s /lib/ld-linux-aarch64.so.1 /opt/lib/ld-linux-aarch64.so.1 >/dev/null 2>&1
