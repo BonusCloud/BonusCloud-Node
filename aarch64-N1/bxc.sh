@@ -24,7 +24,7 @@ BXC_INFO_LOC="$BXC_SSL_DIR/info"
 BXC_EMAIL_LOC="$BXC_SSL_DIR/email"
 BXC_BCODE_LOC="$BXC_SSL_DIR/bcode"
 
-BXC_VER="0.2.2-3n"
+BXC_VER="0.2.2-4n"
 BXC_INFO=$(cat $BXC_INFO_LOC) >/dev/null 2>&1
 BXC_EMAIL=$(cat $BXC_EMAIL_LOC) >/dev/null 2>&1
 BXC_BCODE=$(cat $BXC_BCODE_LOC) >/dev/null 2>&1
@@ -152,6 +152,22 @@ func_stop()
 	killall -q bxc-network
 }
 
+func_enable()
+{
+sed -i "/exit 0/c\
+$BASEDIR\/bxc.sh start\\
+exit 0" /etc/rc.local
+
+	echo "bxc-node: BonusCloud-Node auto start enabled"
+}
+
+func_disable()
+{
+	sed -i '/bxc.sh start/d' /etc/rc.local
+
+	echo "bxc-node: BonusCloud-Node auto start disabled"
+}
+
 case "$1" in
 init)
 	func_init
@@ -162,12 +178,17 @@ start)
 stop)
 	func_stop
 	;;
-
+enable)
+	func_enable
+	;;
+disable)
+	func_disable
+	;;
 report)
 	func_info_report
 	;;
 *)
-	echo "Usage: $0 {init|start|stop|report}"
+	echo "Usage: $0 {init|start|stop|enable|disable|report}"
 	exit 1
 	;;
 esac

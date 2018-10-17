@@ -1,6 +1,6 @@
 # 安装
 ```
-wget https://github.com/hikaruchang/BonusCloud-Node/raw/master/aarch32-openwrt/bxc/bxc-start --no-check-certificate
+wget https://github.com/BonusCloud/BonusCloud-Node/raw/master/aarch32-openwrt/bxc/bxc-start --no-check-certificate
 chmod +x bxc-start
 rm -rf bxc-start
 ```

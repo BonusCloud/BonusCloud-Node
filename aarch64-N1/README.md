@@ -4,7 +4,7 @@ Tested on N1 with Armbian_5.44_S9xxx_Ubuntu_bionic_3.14.29_server_20180729.img.x
 ```
 # Installation procedure
 mkdir bxc && cd bxc
-wget https://github.com/BonusCloud/BonusCloud-Node/raw/master/aarch64-N1/bxc.sh
+wget -O bxc.sh https://github.com/BonusCloud/BonusCloud-Node/raw/master/aarch64-N1/bxc.sh
 chmod +x bxc.sh
 
 # Run "bxc.sh init" for initial setup (ONLY need run ONE time)
@@ -15,5 +15,11 @@ chmod +x bxc.sh
 
 # Run "bxc.sh stop" to stop BonusCloud-Node
 ./bxc.sh stop
+
+# Run "bxc.sh enable" to enable BonusCloud-Node auto start
+./bxc.sh enable
+
+# Run "bxc.sh disable" to disable BonusCloud-Node auto start
+./bxc.sh disable
 
 ```
