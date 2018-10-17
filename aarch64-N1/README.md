@@ -16,4 +16,10 @@ chmod +x bxc.sh
 # Run "bxc.sh stop" to stop BonusCloud-Node
 ./bxc.sh stop
 
+# Run "bxc.sh enable" to enable BonusCloud-Node auto start
+./bxc.sh enable
+
+# Run "bxc.sh disable" to disable BonusCloud-Node auto start
+./bxc.sh disable
+
 ```
