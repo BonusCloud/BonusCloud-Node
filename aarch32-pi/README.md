@@ -1,4 +1,4 @@
-## ROM Download(镜像下载)
+## RaspberryPi ROM Download(镜像下载)
 ```
 wget http://bonuscloud-imgs.oss.cn-north-1.jcloudcs.com/BonusCloud-LiteNode-raspberryPi-armv7l.tar.bz2
 ```
