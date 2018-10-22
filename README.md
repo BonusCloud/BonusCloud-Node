@@ -24,6 +24,11 @@ Suggest for koolshare merlin(380.69-X7.8) with jffs enabled.
 https://github.com/BonusCloud/BonusCloud-Node/tree/master/aarch32-pi
 ```
 
+### NanoPi（64-bit）
+```
+https://github.com/BonusCloud/BonusCloud-Node/tree/master/aarch64-pi
+```
+
 ### PHICOMM N1
 
 #### Script Installation
