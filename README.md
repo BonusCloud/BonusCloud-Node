@@ -19,7 +19,7 @@ Arm v7 Lite Node running in Merlin with koolshare.
 
 Suggest for koolshare merlin(380.69-X7.8) with jffs enabled. 
 
-### RaspberryPi(32-bit)
+### RaspberryPi (32-bit)
 ```
 https://github.com/BonusCloud/BonusCloud-Node/tree/master/aarch32-pi
 ```
