@@ -8,6 +8,7 @@ dbus remove bxc_option
 dbus remove bxc_status
 dbus remove bxc_wan_mac
 dbus remove bxc_local_version
+dbus remove bxc_user_mail
 dbus remove softcenter_module_bxc_install
 dbus remove softcenter_module_bxc_version
 dbus remove softcenter_module_bxc_title

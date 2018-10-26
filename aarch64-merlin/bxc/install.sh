@@ -5,7 +5,7 @@
 eval `dbus export bxc`
 alias echo_date='echo 【$(TZ=UTC-8 date -R +%Y年%m月%d日\ %X)】:'
 
-MD5_CHECK_URL="https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/aarch64/md5.txt"
+MD5_CHECK_URL="https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/aarch64-merlin/md5.txt"
 
 opkg_install() {
 	opkg_exist=`which opkg > /dev/null 2>&1;echo $?`
@@ -134,7 +134,6 @@ if [ -d /koolshare/bxc ];then
 	cp -rf /tmp/bxc/bxc/* /koolshare/bxc/
 	cp -rf /tmp/bxc/install.sh /koolshare/scripts/bxc_install.sh
 	cp -rf /tmp/bxc/uninstall.sh /koolshare/scripts/uninstall_bxc.sh
-	mkdir -p /tmp/etc/bxc-network/
 	mkdir -p /tmp/upload/
 else
 	echo_date 设备koolshare目录无法写入，退出安装！
@@ -145,8 +144,12 @@ fi
 # 如果本地存有邀请码，可以加载使用
 if [ -s /koolshare/bxc/bcode ];then
 	bcode=`cat /koolshare/bxc/bcode` 
+	if [ -s /koolshare/bxc/email ];then
+		mail=`cat /koolshare/bxc/email`
+		dbus set bxc_user_mail="$mail"
+	fi
 	dbus set bxc_bcode="$bcode"
-	echo_date 设备中已有绑定信息，绑定邀请码为:"$bcode"
+	echo_date 设备中已有绑定信息，绑定邀请码为:"$bcode"，用户为："$mail"
 else
 	dbus set bxc_bcode=""
 	echo_date 设备中未检测到邀请码，运行时需要先绑定设备。
