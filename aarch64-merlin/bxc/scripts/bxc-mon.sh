@@ -16,7 +16,7 @@ logerr(){
     if [ "$LOG_MODE"x == "syslog"x ];then
     	logger -c "ERROR: $1" -t bonuscloud-node > /dev/null 2>&1
     elif [ "$LOG_MODE"x == "file"x ];then
-    	echo "[`TZ=UTC-8 date -R '+%Y-%m-%d %H:%M:%S')`] EROOR $1" >> $LOG_FILE
+    	echo "[`TZ=UTC-8 date -R '+%Y-%m-%d %H:%M:%S')`] ERROR $1" >> $LOG_FILE
   	fi
   fi
 }
@@ -60,11 +60,11 @@ info_report(){
 		dbus set bxc_node_info="$info"
 		fcode=`dbus get bxc_bcode`
 		mac=`dbus get bxc_wan_mac`
-		status_code=`curl -m 5 -k --cacert $BXC_SSL_CA --cert $BXC_SSL_CRT --key $BXC_SSL_KEY -H "Content-Type: application/json" -d "{\"mac\":\"$mac\", \"info\":\"$info\"}" -X PUT -w "\nstatus_code:"%{http_code}"\n" "https://117.48.224.43:8081/idb/dev/$fcode" | grep "status_code" | awk -F: '{print $2}'`
+		status_code=`curl -m 5 -k --cacert $BXC_SSL_CA --cert $BXC_SSL_CRT --key $BXC_SSL_KEY -H "Content-Type: application/json" -d "{\"mac\":\"$mac\", \"info\":\"$info\"}" -X PUT -w "\nstatus_code:"%{http_code}"\n" "$BXC_REPORT_URL/$fcode" | grep "status_code" | awk -F: '{print $2}'`
 		if [ $status_code -eq 200 ];then
 			logdebug "node info reported success!"
 		else
-			logerr "node info reported failed($status_code): curl -m 5 -k --cacert $BXC_SSL_CA --cert $BXC_SSL_CRT --key $BXC_SSL_KEY -H \"Content-Type: application/json\" -d \"{\"mac\":\"$mac\", \"info\":\"$info\",}\" -X PUT -w \"\nstatus_code:\"%{http_code}\"\n\" \"https://117.48.224.43:8081/idb/dev/$fcode\""
+			logerr "node info reported failed($status_code): curl -m 5 -k --cacert $BXC_SSL_CA --cert $BXC_SSL_CRT --key $BXC_SSL_KEY -H \"Content-Type: application/json\" -d \"{\"mac\":\"$mac\", \"info\":\"$info\",}\" -X PUT -w \"\nstatus_code:\"%{http_code}\"\n\" \"$BXC_REPORT_URL/$fcode\""
 		fi
 	else
 		logdebug "node info has not changed: $info"
@@ -126,28 +126,39 @@ check_env(){
 	fi
 
 	# ipv6 route check
-	exist=`ip -6 route show table local | grep "local ::1 via :: dev lo" > /dev/null 2>&1;echo $?`
+	exist=`ip -6 route show table local | grep "local ::1 dev lo" > /dev/null 2>&1;echo $?`
 	if [ $exist -ne 0 ];then
-		logerr "route \"local ::1 via :: dev lo\" note exist, restoring..."
+		logerr "route \"local ::1 dev lo\" note exist, restoring..."
 		ip -6 addr del ::1/128 dev lo > /dev/null 2>&1
 		ip -6 addr add ::1/128 dev lo > /dev/null 2>&1
 	else
-		logdebug "route \"local ::1 via :: dev lo\" already exist"
+		logdebug "route \"local ::1 dev lo\" already exist"
 	fi
 
-	tun0_ipaddr=`ip -6  addr show dev tun0 | grep "inet6" | awk '{print $2}'`
-	if [ -n "$tun0_ipaddr" ];then
-		iprefix=`echo $tun0_ipaddr | awk -F/ '{print $1}'`
-		exist=`ip -6 route show table local | grep "local $iprefix via :: dev lo" > /dev/null 2>&1;echo $?`
+	bxc_intf=`ip -6 addr show | grep "fdff:4243:4c4f:5544" -B 1 | grep "tun" | awk '{print $2}' | sed 's/://g'`
+	[ "$bxc_intf"x == ""x ] && bxc_intf="tun0"
+
+	bxc_ipaddr=`ip -6  addr show dev $bxc_intf | grep "inet6" | awk '{print $2}'`
+	if [ -n "$bxc_ipaddr" ];then
+		iprefix=`echo $bxc_ipaddr | awk -F/ '{print $1}'`
+		exist=`ip -6 route show table local | grep "local $iprefix dev lo" > /dev/null 2>&1;echo $?`
 		if [ $exist -ne 0 ];then
-			logerr "route \"local $iprefix via :: dev lo\" note exist, restoring..."
-			ip -6 addr del $tun0_ipaddr dev lo > /dev/null 2>&1
-			ip -6 addr add $tun0_ipaddr dev lo > /dev/null 2>&1
+			logerr "route \"local $iprefix dev lo\" note exist, restoring..."
+			ip -6 addr del $bxc_ipaddr dev bxc_intf > /dev/null 2>&1
+			ip -6 addr add $bxc_ipaddr dev bxc_intf > /dev/null 2>&1
 		else
-			logdebug "route \"local $iprefix via :: dev lo\" already exist"
+			logdebug "route \"local $iprefix dev lo\" already exist"
 		fi
 	else
-		logerr "get tun0_ipaddr failed: ip -6 addr show dev tun0 | grep \"inet6\" | awk '{print $2}'"
+		logerr "get bxc_ipaddr failed: ip -6 addr show dev $bxc_intf | grep \"inet6\" | awk '{print \$2}'"
+	fi
+
+	exist=`ip -6 route show  | grep "fdff:4243:4c4f:5544::/64 dev $bxc_intf" > /dev/null 2>&1;echo $?`
+	if [ $exist -ne 0 ];then
+		logerr "route fdff:4243:4c4f:5544::/64 dev $bxc_intf not exist, restoring..."
+		ip -6 route add fdff:4243:4c4f:5544::/64 dev $bxc_intf > /dev/null 2>&1
+	else
+		logdebug "route fdff:4243:4c4f:5544::/64 dev $bxc_intf already exist"
 	fi
 }
 
@@ -166,19 +177,21 @@ check_iptables() {
 		logerr "ip6tables not exist"
 	fi
 
+	bxc_intf=`ip -6 addr show | grep "fdff:4243:4c4f:5544" -B 1 | grep "tun" | awk '{print $2}' | sed 's/://g'`
+	[ "$bxc_intf"x == ""x ] && bxc_intf="tun0"
 	# acl tcp 8901
-	acl_exist=`ip6tables -C INPUT -p tcp --dport 8901 -j ACCEPT -i tun0 > /dev/null 2>&1;echo $?`
+	acl_exist=`ip6tables -C INPUT -p tcp --dport 8901 -j ACCEPT -i $bxc_intf > /dev/null 2>&1;echo $?`
 	if [ $acl_exist -ne 0 ];then
-		logdebug "add: ip6tables -I INPUT -p tcp --dport 8901 -j ACCEPT -i tun0"
-		ip6tables -I INPUT -p tcp --dport 8901 -j ACCEPT -i tun0 > /dev/null 2>&1
-		check_exist=`ip6tables -C INPUT -p tcp --dport 8901 -j ACCEPT -i tun0 > /dev/null 2>&1;echo $?`
+		logdebug "add: ip6tables -I INPUT -p tcp --dport 8901 -j ACCEPT -i $bxc_intf"
+		ip6tables -I INPUT -p tcp --dport 8901 -j ACCEPT -i $bxc_intf > /dev/null 2>&1
+		check_exist=`ip6tables -C INPUT -p tcp --dport 8901 -j ACCEPT -i $bxc_intf > /dev/null 2>&1;echo $?`
 		if [ $check_exist -ne 0 ];then
-			logerr "failed add: ip6tables -I INPUT -p tcp --dport 8901 -j ACCEPT -i tun0"
+			logerr "failed add: ip6tables -I INPUT -p tcp --dport 8901 -j ACCEPT -i $bxc_intf"
 		else
-			logdebug "success add: ip6tables -I INPUT -p tcp --dport 8901 -j ACCEPT -i tun0"
+			logdebug "success add: ip6tables -I INPUT -p tcp --dport 8901 -j ACCEPT -i $bxc_intf"
 		fi
 	else
-		logdebug "acl exist: ip6tables -I INPUT -p tcp --dport 8901 -j ACCEPT -i tun0 "
+		logdebug "acl exist: ip6tables -I INPUT -p tcp --dport 8901 -j ACCEPT -i $bxc_intf "
 	fi
 
 	acl_exist=`ip6tables -C OUTPUT -p tcp --sport 8901 -j ACCEPT > /dev/null 2>&1;echo $?`
@@ -196,18 +209,18 @@ check_iptables() {
 	fi
 
 	# acl icmpv6
-	acl_exist=`ip6tables -C INPUT -p icmpv6 -j ACCEPT -i tun0 > /dev/null 2>&1;echo $?`
+	acl_exist=`ip6tables -C INPUT -p icmpv6 -j ACCEPT -i $bxc_intf > /dev/null 2>&1;echo $?`
 	if [ $acl_exist -ne 0 ];then
-		logdebug "add: ip6tables -I INPUT -p icmpv6 -j ACCEPT -i tun0"
-		ip6tables -I INPUT -p icmpv6 -j ACCEPT -i tun0 > /dev/null 2>&1
-		check_exist=`ip6tables -C INPUT -p icmpv6 -j ACCEPT -i tun0 > /dev/null 2>&1;echo $?`
+		logdebug "add: ip6tables -I INPUT -p icmpv6 -j ACCEPT -i $bxc_intf"
+		ip6tables -I INPUT -p icmpv6 -j ACCEPT -i $bxc_intf > /dev/null 2>&1
+		check_exist=`ip6tables -C INPUT -p icmpv6 -j ACCEPT -i $bxc_intf > /dev/null 2>&1;echo $?`
 		if [ $check_exist -ne 0 ];then
-			logerr "failed add: ip6tables -I INPUT -p icmpv6 -j ACCEPT -i tun0"
+			logerr "failed add: ip6tables -I INPUT -p icmpv6 -j ACCEPT -i $bxc_intf"
 		else
-			logdebug "success add: ip6tables -I INPUT -p icmpv6 -j ACCEPT -i tun0"
+			logdebug "success add: ip6tables -I INPUT -p icmpv6 -j ACCEPT -i $bxc_intf"
 		fi
 	else
-		logdebug "acl exist: ip6tables -I INPUT -p icmpv6 -j ACCEPT -i tun0"
+		logdebug "acl exist: ip6tables -I INPUT -p icmpv6 -j ACCEPT -i $bxc_intf"
 	fi
 
 	acl_exist=`ip6tables -C OUTPUT -p icmpv6 -j ACCEPT > /dev/null 2>&1;echo $?`
@@ -225,18 +238,18 @@ check_iptables() {
 	fi
 	
 	# acl udp
-	acl_exist=`ip6tables -C INPUT -p udp -j ACCEPT -i tun0 > /dev/null 2>&1;echo $?`
+	acl_exist=`ip6tables -C INPUT -p udp -j ACCEPT -i $bxc_intf > /dev/null 2>&1;echo $?`
 	if [ $acl_exist -ne 0 ];then
-		logdebug "add: ip6tables -I INPUT -p udp -j ACCEPT -i tun0"
-		ip6tables -I INPUT -p udp -j ACCEPT -i tun0 > /dev/null 2>&1
-		check_exist=`ip6tables -C INPUT -p udp -j ACCEPT -i tun0 > /dev/null 2>&1;echo $?`
+		logdebug "add: ip6tables -I INPUT -p udp -j ACCEPT -i $bxc_intf"
+		ip6tables -I INPUT -p udp -j ACCEPT -i $bxc_intf > /dev/null 2>&1
+		check_exist=`ip6tables -C INPUT -p udp -j ACCEPT -i $bxc_intf > /dev/null 2>&1;echo $?`
 		if [ $check_exist -ne 0 ];then
-			logerr "failed add: ip6tables -I INPUT -p udp -j ACCEPT -i tun0"
+			logerr "failed add: ip6tables -I INPUT -p udp -j ACCEPT -i $bxc_intf"
 		else
-			logdebug "success add: ip6tables -I INPUT -p udp -j ACCEPT -i tun0"
+			logdebug "success add: ip6tables -I INPUT -p udp -j ACCEPT -i $bxc_intf"
 		fi
 	else
-		logdebug "acl exist: ip6tables -I INPUT -p udp -j ACCEPT -i tun0"
+		logdebug "acl exist: ip6tables -I INPUT -p udp -j ACCEPT -i $bxc_intf"
 	fi
 
 	acl_exist=`ip6tables -C INPUT -p udp -j ACCEPT -i lo > /dev/null 2>&1;echo $?`
