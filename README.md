@@ -2,7 +2,7 @@
 
 # BonusCloud-Node
 
-### ARM v8（Temporarily unavailable）
+### ARM v8
 ```
 https://github.com/BonusCloud/BonusCloud-Node/blob/master/aarch64-merlin/bxc.tar.gz
 ```
