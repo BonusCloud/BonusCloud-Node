@@ -34,7 +34,7 @@ The recommended mirror file is：Armbian_5.44_S9xxx_Ubuntu_bionic_3.14.29_server
 
 ## ROM
 
-### PHICOMM N1 ROM Download：
+### PHICOMM N1 ROM
 ```
 http://bonuscloud-imgs.oss.cn-north-1.jcloudcs.com/Armbian_5.62_N1_Bonuscloud.img.tar.bz2
 ```
