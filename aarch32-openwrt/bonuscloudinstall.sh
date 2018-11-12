@@ -6,7 +6,7 @@ MIPSEL="https://github.com/hikaruchang/BonusCloud-Node/raw/master/openwrt-ipk/bo
 
 opkg_init(){
 	opkg update
-	opkg install curl wget ca-bundle ca-certificates liblzo 
+	opkg install curl wget ca-bundle ca-certificates liblzo ip6tables-extra kmod-ip6tables-extra
 }
 
 arm_ins(){
