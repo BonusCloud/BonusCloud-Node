@@ -1,1 +1,4 @@
-2a8a255de97bb395a5486a07a78f16d0 bxc-network-aarch64
+bxc-network-aarch64 2a8a255de97bb395a5486a07a78f16d0
+bxc-network-armv7l 209b68c246fa59bf3ab5086bd477014e
+node-aarch64 94be93357b98560c84be3c8afffe3726
+node-armv7l 4605b9f90169ead15d68233095b179a5
