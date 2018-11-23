@@ -14,18 +14,39 @@ arm_ins(){
 	rm /tmp/bonuscloud*
 	cd /tmp&&curl -L -k $ARM -o bonuscloudarm.ipk
 	opkg install /tmp/bonuscloudarm.ipk
+	res=`echo $?`
+	echo "$res"
+	if [ "$res" == 0 ]; then 
+		echo -e "\033[32m Install Success!\033[0m"
+	else
+		echo -e "\033[31m Install Failed!\033[0m"
+	fi
 }
 mips_ins(){
 	opkg_init
 	rm /tmp/bonuscloud*
 	cd /tmp&&curl -L -k $MIPS -o bonuscloudmips.ipk
 	opkg install /tmp/bonuscloudmips.ipk
+	res=`echo $?`
+	echo "$res"
+	if [ "$res" == 0 ]; then 
+		echo -e "\033[32m Install Success!\033[0m"
+	else
+		echo -e "\033[31m Install Failed!\033[0m"
+	fi
 }
 mipsel_ins(){
 	opkg_init
 	rm /tmp/bonuscloud*
 	cd /tmp&&curl -L -k $MIPSEL -o bonuscloudmipsel.ipk
 	opkg install /tmp/bonuscloudmipsel.ipk
+	res=`echo $?`
+	echo "$res"
+	if [ "$res" == 0 ]; then 
+		echo -e "\033[32m Install Success!\033[0m"
+	else
+		echo -e "\033[31m Install Failed!\033[0m"
+	fi
 }
 
 defult_ins(){

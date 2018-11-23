@@ -13,6 +13,13 @@ mipsel_ins(){
 	rm /tmp/bonuscloud*
 	cd /tmp&&curl -L -k $MIPSEL -o bonuscloudmipsel.ipk
 	opkg install /tmp/bonuscloudmipsel.ipk
+	res=`echo $?`
+	echo "$res"
+	if [ "$res" == 0 ]; then 
+		echo -e "\033[32m Install Success!\033[0m"
+	else
+		echo -e "\033[31m Install Failed!\033[0m"
+	fi
 }
 
 
