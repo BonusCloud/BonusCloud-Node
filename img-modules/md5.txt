@@ -1,3 +1,4 @@
+version:v0.1.0-20181210
 node_aarch64 8aada0fee3cd1b6a1926ecac5a836296 /opt/bcloud/nodeapi/node 5
 node_armv7l 8eb355de8552bbf78abeafe695e7da79 /opt/bcloud/nodeapi/node 5
 bxc-network_aarch64 2a8a255de97bb395a5486a07a78f16d0 /opt/bcloud/bxc-network 300
