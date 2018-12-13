@@ -51,7 +51,7 @@ https://github.com/BonusCloud/BonusCloud-Node/tree/master/aarch64-pi
 
 ### Android APP Download：
 
-#### GooGle Play
+#### Google Play
 
 ```
 https://play.google.com/store/apps/details?id=io.bonuscloud.app
