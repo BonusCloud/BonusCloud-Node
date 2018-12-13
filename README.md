@@ -36,12 +36,12 @@ The recommended mirror file is：Armbian_5.44_S9xxx_Ubuntu_bionic_3.14.29_server
 
 ### PHICOMM N1 ROM
 ```
-http://bonuscloud-imgs.oss.cn-north-1.jcloudcs.com/Armbian_5.62_N1_Bonuscloud.img.tar.bz2
+http://bonuscloud-imgs.oss.cn-north-1.jcloudcs.com/BonusCloud-LiteNode-N1-emmc-20181210.img.xz
 ```
 
 ### RaspberryPi (32-bit)
 ```
-https://github.com/BonusCloud/BonusCloud-Node/tree/master/aarch32-pi
+http://bonuscloud-imgs.oss.cn-north-1.jcloudcs.com/BonusCloud-LiteNode-raspberryPi-armv7l-20181210.img.xz
 ```
 
 ### NanoPi（64-bit）
@@ -50,9 +50,19 @@ https://github.com/BonusCloud/BonusCloud-Node/tree/master/aarch64-pi
 ```
 
 ### Android APP Download：
+
+#### GooGle Play
+
+```
+https://play.google.com/store/apps/details?id=io.bonuscloud.app
+```
+
+#### Network Disk Download
+
 ```
 http://bonuscloud-imgs.oss.cn-north-1.jcloudcs.com/BonusCloud-LiteNode-admin-forPI.apk
 ```
+
 ### Community contributors： 
 
 宁（qh szl）https://github.com/qinghon
