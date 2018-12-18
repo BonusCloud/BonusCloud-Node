@@ -28,3 +28,12 @@ chmod +x bxc.sh
 ```
 wget http://bonuscloud-imgs.oss.cn-north-1.jcloudcs.com/BonusCloud-LiteNode-N1-emmc-20181210.img.xz
 ```
+## Android APP Download(安卓APP下载)
+```
+wget http://bonuscloud-imgs.oss.cn-north-1.jcloudcs.com/BonusCloud-LiteNode-admin-forPI.apk
+```
+```
+wget https://play.google.com/store/apps/details?id=io.bonuscloud.app
+```
+## IOS APP Download(IOS APP下载)
+## TODO
