@@ -11,7 +11,7 @@ wget http://bonuscloud-imgs.oss.cn-north-1.jcloudcs.com/BonusCloud-LiteNode-rasp
 wget http://bonuscloud-imgs.oss.cn-north-1.jcloudcs.com/BonusCloud-LiteNode-admin-forPI.apk
 ```
 ```
-https://play.google.com/store/apps/details?id=io.bonuscloud.app
+wget https://play.google.com/store/apps/details?id=io.bonuscloud.app
 ```
 ## IOS APP Download(IOS APP下载)
 ## TODO
