@@ -1,5 +1,4 @@
-# BonusCloud-Node-N1
-## 脚本安装
+# 脚本安装
 
 Tested on N1 with Armbian_5.44_S9xxx_Ubuntu_bionic_3.14.29_server_20180729.img.xz
 ```
@@ -24,7 +23,8 @@ chmod +x bxc.sh
 ./bxc.sh disable
 
 ```
-## 镜像安装
+# 镜像安装
+## 镜像下载
 ```
 wget http://bonuscloud-imgs.oss.cn-north-1.jcloudcs.com/BonusCloud-LiteNode-N1-emmc-20181210.img.xz
 ```
