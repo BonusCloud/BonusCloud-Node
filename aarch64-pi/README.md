@@ -5,11 +5,14 @@ wget http://bonuscloud-imgs.oss.cn-north-1.jcloudcs.com/BonusCloud-LiteNode-nano
 ```
 # 脚本安装模式
 ## TODO
+# APP Download
 ## Android APP Download(安卓APP下载)
 ```
 wget http://bonuscloud-imgs.oss.cn-north-1.jcloudcs.com/BonusCloud-LiteNode-admin-forPI.apk
 ```
-## Support(支持）
+## IOS APP Download（IOS APP下载)
+
+# Support(支持）
 ```
 NanoPiNeoPlus2
 ```
