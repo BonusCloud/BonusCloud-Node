@@ -6,7 +6,7 @@
 
 ### ARM v8
 ```
-https://github.com/BonusCloud/BonusCloud-Node/blob/master/aarch64-merlin/bxc.tar.gz
+https://github.com/BonusCloud/BonusCloud-Node/blob/master/aarch64-merlin
 ```
 Arm v8 Lite Node Running in Merlin with koolshare.
 
@@ -15,7 +15,7 @@ Suggest for Koolshare merlin(374.6) with jffs enabled.
 
 ### ARM v7
 ```
-https://github.com/BonusCloud/BonusCloud-Node/blob/master/aarch32-merlin/bxc.tar.gz
+https://github.com/BonusCloud/BonusCloud-Node/blob/master/aarch32-merlin
 ```
 Arm v7 Lite Node running in Merlin with koolshare.
 
@@ -23,8 +23,6 @@ Suggest for koolshare merlin(380.69-X7.8) with jffs enabled.
 
 
 ### PHICOMM N1
-
-#### Script Installation
 ```
 https://github.com/BonusCloud/BonusCloud-Node/tree/master/aarch64-N1
 ```
@@ -32,35 +30,15 @@ Running in Ubuntu (Armbian).
 
 The recommended mirror file is：Armbian_5.44_S9xxx_Ubuntu_bionic_3.14.29_server_20180729.img.xz
 
-## ROM
-
-### PHICOMM N1 ROM
-```
-http://bonuscloud-imgs.oss.cn-north-1.jcloudcs.com/BonusCloud-LiteNode-N1-emmc-20181210.img.xz
-```
 
 ### RaspberryPi (32-bit)
 ```
-http://bonuscloud-imgs.oss.cn-north-1.jcloudcs.com/BonusCloud-LiteNode-raspberryPi-armv7l-20181210.img.xz
+https://github.com/BonusCloud/BonusCloud-Node/tree/master/aarch32-pi
 ```
 
 ### NanoPi（64-bit）
 ```
 https://github.com/BonusCloud/BonusCloud-Node/tree/master/aarch64-pi
-```
-
-### Android APP Download：
-
-#### Google Play
-
-```
-https://play.google.com/store/apps/details?id=io.bonuscloud.app
-```
-
-#### Network Disk Download
-
-```
-http://bonuscloud-imgs.oss.cn-north-1.jcloudcs.com/BonusCloud-LiteNode-admin-forPI.apk
 ```
 
 ### Community contributors： 
