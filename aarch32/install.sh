@@ -81,16 +81,20 @@ check_apt(){
     
 }
 check_env(){
-    ret=`$BASE_DIR/bxc-network`
+    ret=`$BASE_DIR/bxc-network 2>&1`
     if [ -n "$ret" ]; then
         log "[error]" "$ret"
-        res=`echo $ret|grep -E 'libssl|libcrypto'`
-        if [ -n "$res"]; then
+        res=`echo $ret|grep -E 'libssl|libcrypto|libraries'`
+        if [ -n "$res" ]; then
             apt install -y libcurl3 libcurl-openssl1.0-dev
             chmod 755 ./res/lib/*
             cp ./res/lib/* /usr/lib/
             ldconfig 
+        else
+            log "[error]" "unknown error,please toke to me at github issue"
         fi
+    else
+        log "[info]" "bxc-network runtime env ok"
     fi
 }
 ins_docker(){
@@ -244,6 +248,9 @@ case $1 in
         ;;
     bxcup )
         ins_bxcup
+        ;;
+    check_env )
+        check_env
         ;;
     * )
         init
