@@ -11,11 +11,11 @@ DOC_LOW="1.11.1"
 log(){
     if [ "$1" = "[error]" ]; then
         echo "[`date '+%Y-%m-%d %H:%M:%S'`] $1 $2" >>$LOG_FILE
-        echo -e "[`date '+%Y-%m-%d %H:%M:%S'`] \033[31m $1 $2 \033[0m" 
+        echo "[`date '+%Y-%m-%d %H:%M:%S'`] $1 $2" 
     elif [ "$1" = "[info]" ]; then
         echo "[`date '+%Y-%m-%d %H:%M:%S'`] $1 $2" >>$LOG_FILE
     else
-        echo "[`date '+%Y-%m-%d %H:%M:%S'`] [debug] $2" >>$LOG_FILE
+        echo "[`date '+%Y-%m-%d %H:%M:%S'`] [debug] $1 $2" >>$LOG_FILE
     fi
 }
 function version_ge() { test "$(echo "$@" | tr " " "\n" | sort -rV | head -n 1)" == "$1"; }
@@ -70,21 +70,33 @@ check_k8s(){
 check_apt(){
     ret=`which apt;echo $?`
     if [ $ret -ne 0 ]; then
-        log "[error]" " apt not found !install fail"
+        log "[error]" "apt not found !install fail"
         exit 1
     fi
     ret=`getconf LONG_BIT`
-    if [ "$ret" -ne 64 ]; then
-        log "[error]" " this is 64 system install script ,if you's not ,please install correspond system"
+    if [ "$ret" -ne 32 ]; then
+        log "[error]" "this is 32 system install script ,if you's not ,please install correspond system"
         exit 1
     fi
     
+}
+check_env(){
+    ret=`$BASE_DIR/bxc-network`
+    if [ -n "$ret" ]; then
+        log "[error]" "$ret"
+        res=`echo $ret|grep -E 'libssl|libcrypto'`
+        if [ -n "$res"]; then
+            apt install -y libcurl3 libcurl-openssl1.0-dev
+            chmod 755 ./res/lib/*
+            cp ./res/lib/* /usr/lib/
+            ldconfig 
+        fi
+    fi
 }
 ins_docker(){
     check_doc
     res=`echo $?` 
     if [ $res -ne 0 ]; then
-        log "[info]" "installing docker"
         apt install -y docker.io
     else
         log "[info]" " docker was found! skiped"
@@ -130,9 +142,9 @@ EOF
     docker tag registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/pause:arm-3.1 k8s.gcr.io/pause:3.1
     docker tag registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/kube-proxy-arm:v1.12.3 k8s.gcr.io/kube-proxy:v1.12.3
     
-    docker pull  registry.cn-beijing.aliyuncs.com/bxc_public/bxc-worker:v2-arm64
+    docker pull  registry.cn-beijing.aliyuncs.com/bxc_public/bxc-worker:v2-arm
 
-    docker tag registry.cn-beijing.aliyuncs.com/bxc_public/bxc-worker:v2-arm64 bxc-worker:v2
+    docker tag registry.cn-beijing.aliyuncs.com/bxc_public/bxc-worker:v2-arm bxc-worker:v2
     cat <<EOF >  /etc/sysctl.d/k8s.conf
 vm.swappiness = 0
 net.ipv6.conf.default.forwarding = 1
@@ -198,8 +210,9 @@ EOF
 ins_bxcup(){
     cp ./res/bxc-update /etc/cron.daily/bxc-update
     chmod +x /etc/cron.daily/bxc-update
-    log "[info]" " install bxc_update over"
+    log "[info]"" install bxc_update over"
 }
+
 verifty(){
     if [ ! -s $BASE_DIR/bxc-network ]; then
         return 1
