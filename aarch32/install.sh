@@ -198,6 +198,7 @@ EOF
 
     systemctl enable bxc-node
     systemctl start bxc-node
+    check_env
     isactive=`ps aux | grep -v grep | grep "nodeapi/node" > /dev/null; echo $?`
     if [ $isactive -ne 0 ];then
         log "[error]" " node start faild, rollback and restart"
