@@ -1,0 +1,24 @@
+{
+  "name": "mynet",
+  "cniVersion": "0.3.0",
+  "plugins": [
+    {
+      "type": "bridge",
+      "bridge": "cni0",
+      "ipMasq": true,
+      "isGateway": true,
+      "ipam":
+      {
+          "type": "host-local",
+          "subnet": "10.244.1.0/24",
+          "routes": [
+              {"dst": "0.0.0.0/0"}
+          ]
+      }
+    },
+    {
+       "type": "portmap",
+       "capabilities": {"portMappings": true}
+    }
+  ]
+}
