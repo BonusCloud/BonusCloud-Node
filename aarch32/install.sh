@@ -94,9 +94,7 @@ check_env(){
     fi
 }
 ins_docker(){
-    check_doc
-    res=`echo $?` 
-    if [ $res -ne 0 ]; then
+    if ! check_doc ; then
         apt install -y docker.io
     else
         log "[info]" " docker was found! skiped"
@@ -123,16 +121,19 @@ init(){
 }
 
 ins_k8s(){
-    check_k8s
-    res=`echo $?` 
-    if [ $res -ne 0 ]; then
+    if ! check_k8s ; then
         curl https://mirrors.aliyun.com/kubernetes/apt/doc/apt-key.gpg | apt-key add -
         cat <<EOF >/etc/apt/sources.list.d/kubernetes.list
 deb https://mirrors.aliyun.com/kubernetes/apt/ kubernetes-xenial main
 EOF
         log "[info]" "installing k8s"
+        apt update
         apt install -y kubeadm=1.12.3-00 kubectl=1.12.3-00 kubelet=1.12.3-00
         apt-mark hold kubelet kubeadm kubectl
+        if ! check_k8s ; then
+            log "[error]" "k8s install fail!"
+            exit 1
+        fi
     else
         log "[info]" " k8s was found! skip"
     fi
@@ -249,9 +250,7 @@ case $1 in
         ins_k8s
         ins_node
         ins_bxcup
-        verifty
-        res=`echo $?`
-        if [ $res -ne 0 ]; then
+        if ! verifty ; then
             echo "install faild! return $res"
             log "[error]" " verifty error ,install fail"
         else
