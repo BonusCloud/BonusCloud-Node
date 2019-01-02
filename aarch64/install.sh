@@ -20,7 +20,7 @@ log(){
 }
 function version_ge() { test "$(echo "$@" | tr " " "\n" | sort -rV | head -n 1)" == "$1"; }
 check_doc(){
-    retd=`which docker;echo $?`
+    retd=`which docker>/dev/null;echo $?`
     if [ $retd -ne 0 ]; then
         log "[info]" "docker not found"
         return 1
@@ -36,9 +36,9 @@ check_doc(){
     fi
 }
 check_k8s(){
-    reta=`which kubeadm;echo $?`
-    retl=`which kubelet;echo $?`
-    retc=`which kubectl;echo $?`
+    reta=`which kubeadm>/dev/null;echo $?`
+    retl=`which kubelet>/dev/null;echo $?`
+    retc=`which kubectl>/dev/null;echo $?`
     if [ $reta -ne 0 ] || [ $retl -ne 0 ] || [ $retc -ne 0 ] ; then
         log "[info]" "k8s not found"
         return 1
@@ -68,7 +68,7 @@ check_k8s(){
     fi
 }
 check_apt(){
-    ret=`which apt;echo $?`
+    ret=`which apt>/dev/null;echo $?`
     if [ $ret -ne 0 ]; then
         log "[error]" " apt not found !install fail"
         exit 1

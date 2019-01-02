@@ -20,7 +20,7 @@ log(){
 }
 function version_ge() { test "$(echo "$@" | tr " " "\n" | sort -rV | head -n 1)" == "$1"; }
 check_doc(){
-    retd=`which docker;echo $?`
+    retd=`which docker>/dev/null;echo $?`
     if [ $retd -ne 0 ]; then
         log "[info]" "docker not found"
         return 1
@@ -36,9 +36,9 @@ check_doc(){
     fi
 }
 check_k8s(){
-    reta=`which kubeadm;echo $?`
-    retl=`which kubelet;echo $?`
-    retc=`which kubectl;echo $?`
+    reta=`which kubeadm>/dev/null;echo $?`
+    retl=`which kubelet>/dev/null;echo $?`
+    retc=`which kubectl>/dev/null;echo $?`
     if [ $reta -ne 0 ] || [ $retl -ne 0 ] || [ $retc -ne 0 ] ; then
         log "[info]" "k8s not found"
         return 1
@@ -68,7 +68,7 @@ check_k8s(){
     fi
 }
 check_apt(){
-    ret=`which apt;echo $?`
+    ret=`which apt >/dev/null;echo $?`
     if [ $ret -ne 0 ]; then
         log "[error]" "apt not found !install fail"
         exit 1
@@ -126,7 +126,7 @@ init(){
 
 ins_k8s(){
     if ! check_k8s ; then
-        curl https://mirrors.aliyun.com/kubernetes/apt/doc/apt-key.gpg | apt-key add -
+        wget  https://mirrors.aliyun.com/kubernetes/apt/doc/apt-key.gpg -qO- | apt-key add -
         cat <<EOF >/etc/apt/sources.list.d/kubernetes.list
 deb https://mirrors.aliyun.com/kubernetes/apt/ kubernetes-xenial main
 EOF
@@ -161,9 +161,9 @@ EOF
 }
 ins_node(){
     arch=`uname -m`
-    curl -s -t 3 -m 5 "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules/md5.txt" -o /tmp/md5.txt
+    wget "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules/md5.txt" -O /tmp/md5.txt
     if [ ! -s "/tmp/md5.txt" ]; then
-        log "[error]" " curl -t 3 -m 5 \"https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules/md5.txt\" -o /tmp/md5.txt"
+        log "[error]" " wget \"https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules/md5.txt\" -O /tmp/md5.txt"
         return
     fi
     for line in `grep "$arch" /tmp/md5.txt`
@@ -174,7 +174,7 @@ ins_node(){
         start_wait=`echo $line | awk -F: '{print $4}'`
         #local_md5_val=`md5sum $file_path | awk '{print $1}'`
     
-        curl -s -t 3 -m 300 "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules/$git_file_name" -o /tmp/$git_file_name
+        wget  "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules/$git_file_name" -O /tmp/$git_file_name
         download_md5=`md5sum /tmp/$git_file_name | awk '{print $1}'`
         if [ "$download_md5"x != "$git_md5_val"x ];then
             log "[error]" " download file /tmp/$git_file_name md5 $download_md5 different from git md5 $git_md5_val, ignore this update and continue ..."
