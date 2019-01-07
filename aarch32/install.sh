@@ -1,8 +1,16 @@
 #!/bin/bash 
 
+#https://github.com/BonusCloud/BonusCloud-Node/issues
+
 BASE_DIR="/opt/bcloud"
 BOOTCONFIG="$BASE_DIR/scripts/bootconfig"
 NODE_INFO="$BASE_DIR/node.db"
+SSL_CA="$BASE_DIR/ca.crt"
+SSL_CRT="$BASE_DIR/client.crt"
+SSL_KEY="$BASE_DIR/client.key"
+VERSION_FILE="$BASE_DIR/VERSION"
+REPORT_URL="https://bxcvenus.com/idb/dev"
+
 LOG_FILE="ins.log"
 
 K8S_LOW="1.12.3"
@@ -11,7 +19,7 @@ DOC_LOW="1.11.1"
 log(){
     if [ "$1" = "[error]" ]; then
         echo "[`date '+%Y-%m-%d %H:%M:%S'`] $1 $2" >>$LOG_FILE
-        echo "[`date '+%Y-%m-%d %H:%M:%S'`] $1 $2" 
+        echo -e "[`date '+%Y-%m-%d %H:%M:%S'`] \033[31m $1 $2 \033[0m"
     elif [ "$1" = "[info]" ]; then
         echo "[`date '+%Y-%m-%d %H:%M:%S'`] $1 $2" >>$LOG_FILE
     else
@@ -97,6 +105,21 @@ check_env(){
         log "[info]" "bxc-network runtime env ok"
     fi
 }
+check_info(){
+    if [ ! -s $NODE_INFO ]; then
+        touch $NODE_INFO
+    else
+        res=`grep -q -e '@' -e '-' $NODE_INFO; echo $? `
+        if [ $res -ne 0 ]; then
+            log "" "$NODE_INFO file not found bcode or mail,need empty file "
+            rm $NODE_INFO
+            touch $NODE_INFO
+        else
+            log "[info]" "$NODE_INFO file have bcode or mail,skip"
+        fi
+        
+    fi
+}
 ins_docker(){
     if ! check_doc ; then
         apt install -y docker.io
@@ -115,12 +138,7 @@ init(){
     mkdir -p /etc/cni/net.d
     mkdir -p $BASE_DIR/scripts
     mkdir -p $BASE_DIR/nodeapi 
-    if [ ! -s $NODE_INFO ]; then
-        touch $NODE_INFO
-    else
-        rm $NODE_INFO
-        touch $NODE_INFO
-    fi
+    check_info
     cp -r ./res/compute $BASE_DIR
 }
 
@@ -187,6 +205,8 @@ ins_node(){
         fi
         
     done
+    git_version=`grep "version" /tmp/md5.txt | awk -F: '{print $2}'`
+    echo $git_version >$VERSION_FILE
     cat <<EOF >/lib/systemd/system/bxc-node.service
 [Unit]
 Description=bxc node app
@@ -235,7 +255,46 @@ verifty(){
     log "[info]" " verifty file over"
     return 0 
 }
-
+check_v(){
+    res=`grep -q 'v' $VERSION_FILE; echo $?`
+    if [ $res -ne 0 ]; then
+        log "[error]" "$VERSION_FILE not find version,try reinstall "
+    else
+        log "[info]" "$VERSION_FILE found"
+    fi
+    return "$res"
+}
+report_V(){
+    report(){
+        local_version=`cat $VERSION_FILE`
+        mac=`ip addr list dev eth0 | grep "ether" | awk '{print $2}'`
+        bcode=` cat $NODE_INFO |sed 's/,/\n/g' | grep "bcode" | awk -F: '{print $NF}' | sed 's/"//g'`
+        status_code=`curl -m 5 -k --cacert $SSL_CA --cert $SSL_CRT --key $SSL_KEY -H "Content-Type: application/json" -d "{\"mac\":\"$mac\", \"info\":\"$local_version\"}" -X PUT -w "\nstatus_code:"%{http_code}"\n" "$REPORT_URL/$bcode" | grep "status_code" | awk -F: '{print $2}'`
+        if [ $status_code -eq 200 ];then
+            log "[info]" "version $git_version reported success!"
+        else
+            log "[error]" "version reported failed($status_code):curl -m 5 -k --cacert $SSL_CA --cert $SSL_CRT --key $SSL_KEY -H \"Content-Type: application/json\" -d \"{\"mac\":\"$mac\", \"info\":\"$local_version\",}\" -X PUT -w \"status_code:\"%{http_code}\" \"$REPORT_URL/$bcode\""
+        fi
+    }
+    if [ ! -s $SSL_CA ] || [ ! -s $SSL_CRT ] || [ ! -s $SSL_KEY ] || [ ! -s $NODE_INFO ];then
+        log "[error]" "ssl file or node.db file not found, ignore to report verison."
+        exit 1
+    fi
+    check_v
+    if  [ $? -ne 0 ] ; then
+        ins_node
+        check_v
+        if [ $? -ne 0 ] ; then
+            log "[error]" "install node failed"
+            exit 1
+        else 
+            log "[info]" "update node success,try report version"
+            report
+        fi
+    else
+        report
+    fi
+}
 case $1 in
     init )
         init
@@ -251,6 +310,9 @@ case $1 in
         ;;
     check_env )
         check_env
+        ;;
+    report_v )
+        report_V
         ;;
     * )
         init
