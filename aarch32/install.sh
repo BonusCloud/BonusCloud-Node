@@ -92,12 +92,9 @@ check_env(){
     ret=`$BASE_DIR/bxc-network 2>&1`
     if [ -n "$ret" ]; then
         log "[error]" "$ret"
-        res=`echo $ret|grep -E 'libssl|libcrypto|libraries'`
+        res=`echo $ret|grep -E 'libraries'`
         if [ -n "$res" ]; then
-            apt install -y libcurl3 libcurl-openssl1.0-dev
-            chmod 755 ./res/lib/*
-            cp ./res/lib/* /usr/lib/
-            ldconfig 
+            apt install -y liblzo2-dev libjson-c-dev libssl-dev libcurl4-openssl-dev
         else
             log "[error]" "unknown error,please toke to me at github issue"
         fi
@@ -130,8 +127,12 @@ ins_docker(){
 init(){
     echo >$LOG_FILE
     systemctl enable ntp
-    systemctl start ntp
-
+    if [ $? -ne 0 ]; then
+        timedatectl set-ntp true
+    else
+        systemctl start ntp
+    fi
+    swapoff -a
     check_apt  
     apt update 
     ins_docker
@@ -144,7 +145,7 @@ init(){
 
 ins_k8s(){
     if ! check_k8s ; then
-        wget  https://mirrors.aliyun.com/kubernetes/apt/doc/apt-key.gpg -qO- | apt-key add -
+        curl https://mirrors.aliyun.com/kubernetes/apt/doc/apt-key.gpg | apt-key add -
         cat <<EOF >/etc/apt/sources.list.d/kubernetes.list
 deb https://mirrors.aliyun.com/kubernetes/apt/ kubernetes-xenial main
 EOF
@@ -179,9 +180,9 @@ EOF
 }
 ins_node(){
     arch=`uname -m`
-    wget "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules/md5.txt" -O /tmp/md5.txt
+    curl -s -t 3 -m 5 "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules/md5.txt" -o /tmp/md5.txt
     if [ ! -s "/tmp/md5.txt" ]; then
-        log "[error]" " wget \"https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules/md5.txt\" -O /tmp/md5.txt"
+        log "[error]" "curl -s -t 3 -m 5 \"https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules/md5.txt\" -O /tmp/md5.txt"
         return
     fi
     for line in `grep "$arch" /tmp/md5.txt`
@@ -190,9 +191,9 @@ ins_node(){
         git_md5_val=`echo $line | awk -F: '{print $2}'`
         file_path=`echo $line | awk -F: '{print $3}'`
         start_wait=`echo $line | awk -F: '{print $4}'`
-        #local_md5_val=`md5sum $file_path | awk '{print $1}'`
-    
-        wget  "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules/$git_file_name" -O /tmp/$git_file_name
+        local_md5_val=`md5sum $file_path | awk '{print $1}'`
+
+        curl -s -t 3 -m 300 "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules/$git_file_name" -o /tmp/$git_file_name
         download_md5=`md5sum /tmp/$git_file_name | awk '{print $1}'`
         if [ "$download_md5"x != "$git_md5_val"x ];then
             log "[error]" " download file /tmp/$git_file_name md5 $download_md5 different from git md5 $git_md5_val, ignore this update and continue ..."
@@ -320,7 +321,6 @@ case $1 in
         ins_node
         ins_bxcup
         if ! verifty ; then
-            echo "install faild! return $res"
             log "[error]" " verifty error ,install fail"
         else
             log "[info]" "all install over"
