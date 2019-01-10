@@ -1,7 +1,7 @@
 ### install
 Download install.tar.gz 
 ```
-tar -zxvf install.tar.gz &&cd install &&./install.sh
+wget https://github.com/qinghon/BonusCloud-Node/raw/master/aarch32/install.sh -O install.sh&&bash install.sh
 ```
 
 The system passed the test

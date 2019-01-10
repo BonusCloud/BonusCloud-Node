@@ -23,7 +23,7 @@ log(){
     elif [ "$1" = "[info]" ]; then
         echo "[`date '+%Y-%m-%d %H:%M:%S'`] $1 $2" >>$LOG_FILE
     else
-        echo "[`date '+%Y-%m-%d %H:%M:%S'`] [debug] $2" >>$LOG_FILE
+        echo "[`date '+%Y-%m-%d %H:%M:%S'`] [debug] $1 $2" >>$LOG_FILE
     fi
 }
 function version_ge() { test "$(echo "$@" | tr " " "\n" | sort -rV | head -n 1)" == "$1"; }
@@ -76,17 +76,31 @@ check_k8s(){
     fi
 }
 check_apt(){
-    ret=`which apt>/dev/null;echo $?`
+    ret=`which apt >/dev/null;echo $?`
     if [ $ret -ne 0 ]; then
-        log "[error]" " apt not found !install fail"
+        log "[error]" "apt not found !install fail"
         exit 1
     fi
     ret=`getconf LONG_BIT`
     if [ "$ret" -ne 64 ]; then
-        log "[error]" " this is 64 system install script ,if you's not ,please install correspond system"
+        log "[error]" "this is 64 system install script ,if you's not ,please install correspond system"
         exit 1
     fi
-    
+    apt install -y curl apt-transport-https
+}
+check_env(){
+    ret=`$BASE_DIR/bxc-network 2>&1`
+    if [ -n "$ret" ]; then
+        log "[error]" "$ret"
+        res=`echo $ret|grep -E 'libraries'`
+        if [ -n "$res" ]; then
+            apt install -y liblzo2-dev libjson-c-dev libssl-dev libcurl4-openssl-dev
+        else
+            log "[error]" "unknown error,please toke to me at github issue"
+        fi
+    else
+        log "[info]" "bxc-network runtime env ok"
+    fi
 }
 check_info(){
     if [ ! -s $NODE_INFO ]; then
@@ -105,7 +119,6 @@ check_info(){
 }
 ins_docker(){
     if ! check_doc ; then
-        log "[info]" "installing docker"
         apt install -y docker.io
     else
         log "[info]" " docker was found! skiped"
@@ -114,8 +127,12 @@ ins_docker(){
 init(){
     echo >$LOG_FILE
     systemctl enable ntp
-    systemctl start ntp
-
+    if [ $? -ne 0 ]; then
+        timedatectl set-ntp true
+    else
+        systemctl start ntp
+    fi
+    swapoff -a
     check_apt  
     apt update 
     ins_docker
@@ -161,12 +178,16 @@ EOF
     sysctl -p /etc/sysctl.d/k8s.conf
     log "[info]" "k8s install over"
 }
+ins_conf(){
+    wget https://github.com/BonusCloud/BonusCloud-Node/raw/master/aarch64/res/compute/10-mynet.conflist -O $BASE_DIR/compute/10-mynet.conflist
+    wget https://github.com/BonusCloud/BonusCloud-Node/raw/master/aarch64/res/compute/99-loopback.conf -O $BASE_DIR/compute/99-loopback.conf
+}
 ins_node(){
     arch=`uname -m`
     curl -s -t 3 -m 5 "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules/md5.txt" -o /tmp/md5.txt
     if [ ! -s "/tmp/md5.txt" ]; then
-        log "[error]" " curl -t 3 -m 5 \"https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules/md5.txt\" -o /tmp/md5.txt"
-        return 1
+        log "[error]" "curl -s -t 3 -m 5 \"https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules/md5.txt\" -O /tmp/md5.txt"
+        return
     fi
     for line in `grep "$arch" /tmp/md5.txt`
     do
@@ -174,8 +195,8 @@ ins_node(){
         git_md5_val=`echo $line | awk -F: '{print $2}'`
         file_path=`echo $line | awk -F: '{print $3}'`
         start_wait=`echo $line | awk -F: '{print $4}'`
-        #local_md5_val=`md5sum $file_path | awk '{print $1}'`
-    
+        local_md5_val=`md5sum $file_path | awk '{print $1}'`
+
         curl -s -t 3 -m 300 "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules/$git_file_name" -o /tmp/$git_file_name
         download_md5=`md5sum /tmp/$git_file_name | awk '{print $1}'`
         if [ "$download_md5"x != "$git_md5_val"x ];then
@@ -207,6 +228,7 @@ EOF
 
     systemctl enable bxc-node
     systemctl start bxc-node
+    check_env
     isactive=`ps aux | grep -v grep | grep "nodeapi/node" > /dev/null; echo $?`
     if [ $isactive -ne 0 ];then
         log "[error]" " node start faild, rollback and restart"
@@ -217,10 +239,11 @@ EOF
 }
 
 ins_bxcup(){
-    cp ./res/bxc-update /etc/cron.daily/bxc-update
+    wget https://github.com/BonusCloud/BonusCloud-Node/raw/master/aarch64/res/bxc-update -O /etc/cron.daily/bxc_update
     chmod +x /etc/cron.daily/bxc-update
-    log "[info]" " install bxc_update over"
+    log "[info]"" install bxc_update over"
 }
+
 verifty(){
     if [ ! -s $BASE_DIR/bxc-network ]; then
         return 1
@@ -290,17 +313,20 @@ case $1 in
     bxcup )
         ins_bxcup
         ;;
+    check_env )
+        check_env
+        ;;
     report_v )
         report_V
         ;;
     * )
         init
         ins_k8s
+        ins_conf
         ins_node
         ins_bxcup
         if ! verifty ; then
-            echo "install faild! return $res"
-            log "[error]" "verifty error ,install fail"
+            log "[error]" " verifty error ,install fail"
         else
             log "[info]" "all install over"
         fi

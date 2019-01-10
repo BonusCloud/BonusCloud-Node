@@ -5,7 +5,7 @@ package Depends
 
 Download install.tar.gz 
 ```
-tar -zxvf install32.tar.gz &&cd install32 &&./install.sh
+wget https://github.com/qinghon/BonusCloud-Node/raw/master/aarch32/install.sh -O install.sh&&bash install.sh
 ```
 The system passed the test:
 - raspbian_3b+:raspbian_lite_latest: [Raspberrypi download link](https://downloads.raspberrypi.org/raspbian_lite_latest)
