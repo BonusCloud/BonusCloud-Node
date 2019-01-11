@@ -88,18 +88,26 @@ check_apt(){
     fi
     apt install -y curl apt-transport-https
 }
-check_env(){
+down_env(){
     ret=`$BASE_DIR/bxc-network 2>&1`
     if [ -n "$ret" ]; then
-        log "[error]" "$ret"
-        res=`echo $ret|grep -E 'libraries'`
-        if [ -n "$res" ]; then
-            apt install -y liblzo2-dev libjson-c-dev libssl-dev libcurl4-openssl-dev
-        else
-            log "[error]" "unknown error,please toke to me at github issue"
-        fi
-    else
-        log "[info]" "bxc-network runtime env ok"
+        mkdir -p /usr/lib/bxc
+        echo "/usr/lib/bxc">/etc/ld.so.conf.d/bxc.conf
+        lib_url="https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/aarch32/res/lib"
+        #lib_url="https://raw.githubusercontent.com/qinghon/BonusCloud-Node/master/aarch32/res/lib"
+        i=36
+        while `$BASE_DIR/bxc-network 2>&1|grep -q 'libraries'` ; do
+            LIB=`$BASE_DIR/bxc-network 2>&1|awk -F: '{print $3}'|awk '{print $1}'`
+            log "[info]" "$LIB will download"
+            wget "$lib_url/$LIB" -O /usr/lib/bxc/$LIB
+            ldconfig
+            if [[ $i -le 0 ]]; then
+                log "[error]" "`$BASE_DIR/bxc-network 2>&1`"
+                break
+            fi
+            i=`expr $i - 1`
+            echo "$i"
+        done
     fi
 }
 check_info(){
@@ -228,7 +236,7 @@ EOF
 
     systemctl enable bxc-node
     systemctl start bxc-node
-    check_env
+    down_env
     isactive=`ps aux | grep -v grep | grep "nodeapi/node" > /dev/null; echo $?`
     if [ $isactive -ne 0 ];then
         log "[error]" " node start faild, rollback and restart"
@@ -239,7 +247,7 @@ EOF
 }
 
 ins_bxcup(){
-    wget https://github.com/BonusCloud/BonusCloud-Node/raw/master/aarch32/res/bxc-update -O /etc/cron.daily/bxc_update
+    wget https://github.com/BonusCloud/BonusCloud-Node/raw/master/aarch32/res/bxc-update -O /etc/cron.daily/bxc-update
     chmod +x /etc/cron.daily/bxc-update
     log "[info]"" install bxc_update over"
 }
@@ -329,8 +337,8 @@ case $1 in
     bxcup )
         ins_bxcup
         ;;
-    check_env )
-        check_env
+    down_env )
+        down_env
         ;;
     report_v )
         report_V

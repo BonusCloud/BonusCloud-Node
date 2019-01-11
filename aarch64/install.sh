@@ -94,12 +94,14 @@ down_env(){
         mkdir -p /usr/lib/bxc
         echo "/usr/lib/bxc">/etc/ld.so.conf.d/bxc.conf
         lib_url="https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/aarch64/res/lib"
+        #lib_url="https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/aarch64/res/lib"
         i=44
         while `$BASE_DIR/bxc-network 2>&1|grep -q 'libraries'` ; do
             LIB=`$BASE_DIR/bxc-network 2>&1|awk -F: '{print $3}'|awk '{print $1}'`
             wget "$lib_url/$LIB" -O /usr/lib/bxc/$LIB
             ldconfig
             if [[ $i -le 0 ]]; then
+                log "[error]" "`$BASE_DIR/bxc-network 2>&1`"
                 break
             fi
             i=`expr $i - 1`
@@ -242,7 +244,7 @@ EOF
 }
 
 ins_bxcup(){
-    wget https://github.com/BonusCloud/BonusCloud-Node/raw/master/aarch64/res/bxc-update -O /etc/cron.daily/bxc_update
+    wget https://github.com/BonusCloud/BonusCloud-Node/raw/master/aarch64/res/bxc-update -O /etc/cron.daily/bxc-update
     chmod +x /etc/cron.daily/bxc-update
     log "[info]"" install bxc_update over"
 }
