@@ -300,6 +300,22 @@ report_V(){
         report
     fi
 }
+remove(){
+    read -p "Are you sure all remove BonusCloud plugin? yes/n" CHOSE
+    if [ -z $CHOSE ]; then
+        exit 0
+    elif [ "$CHOSE" == "n" -o "$CHOSE" == "N" -o "$CHOSE" == "no" ]; then
+        exit 0
+    elif [ "$CHOSE" == "yes" -o "$CHOSE" == "YES" ]; then
+        rm -rf /opt/bcloud /lib/systemd/system/bxc-node.service /etc/cron.daily/bxc-update
+        echo "BonusCloud plugin removed"
+        apt remove -y kubelet kubectl kubeadm
+        echo "k8s removed"
+        rm -rf /etc/ld.so.conf.d/bxc.conf /usr/lib/bxc
+        echo "libraries removed"
+        echo "see you again!"
+    fi
+}
 case $1 in
     init )
         init
@@ -318,6 +334,9 @@ case $1 in
         ;;
     report_v )
         report_V
+        ;;
+    remove )
+        remove
         ;;
     * )
         init

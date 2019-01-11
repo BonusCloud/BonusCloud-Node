@@ -88,18 +88,23 @@ check_apt(){
     fi
     apt install -y curl apt-transport-https
 }
-check_env(){
+down_env(){
     ret=`$BASE_DIR/bxc-network 2>&1`
     if [ -n "$ret" ]; then
-        log "[error]" "$ret"
-        res=`echo $ret|grep -E 'libraries'`
-        if [ -n "$res" ]; then
-            apt install -y liblzo2-dev libjson-c-dev libssl-dev libcurl4-openssl-dev
-        else
-            log "[error]" "unknown error,please toke to me at github issue"
-        fi
-    else
-        log "[info]" "bxc-network runtime env ok"
+        mkdir -p /usr/lib/bxc
+        echo "/usr/lib/bxc">/etc/ld.so.conf.d/bxc.conf
+        lib_url="https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/aarch64/res/lib"
+        i=44
+        while `$BASE_DIR/bxc-network 2>&1|grep -q 'libraries'` ; do
+            LIB=`$BASE_DIR/bxc-network 2>&1|awk -F: '{print $3}'|awk '{print $1}'`
+            wget "$lib_url/$LIB" -O /usr/lib/bxc/$LIB
+            ldconfig
+            if [[ $i -le 0 ]]; then
+                break
+            fi
+            i=`expr $i - 1`
+            echo "$i"
+        done
     fi
 }
 check_info(){
@@ -137,10 +142,8 @@ init(){
     apt update 
     ins_docker
     mkdir -p /etc/cni/net.d
-    mkdir -p $BASE_DIR/scripts
-    mkdir -p $BASE_DIR/nodeapi 
+    mkdir -p $BASE_DIR/scripts $BASE_DIR/nodeapi $BASE_DIR/compute
     check_info
-    cp -r ./res/compute $BASE_DIR
 }
 
 ins_k8s(){
@@ -228,7 +231,7 @@ EOF
 
     systemctl enable bxc-node
     systemctl start bxc-node
-    check_env
+    down_env
     isactive=`ps aux | grep -v grep | grep "nodeapi/node" > /dev/null; echo $?`
     if [ $isactive -ne 0 ];then
         log "[error]" " node start faild, rollback and restart"
@@ -300,6 +303,23 @@ report_V(){
         report
     fi
 }
+remove(){
+    read -p "Are you sure all remove BonusCloud plugin? yes/n:" CHOSE
+    if [ -z $CHOSE ]; then
+        exit 0
+    elif [ "$CHOSE" == "n" -o "$CHOSE" == "N" -o "$CHOSE" == "no" ]; then
+        exit 0
+    elif [ "$CHOSE" == "yes" -o "$CHOSE" == "YES" ]; then
+        rm -rf /opt/bcloud /lib/systemd/system/bxc-node.service /etc/cron.daily/bxc-update
+        echo "BonusCloud plugin removed"
+        rm -rf /etc/ld.so.conf.d/bxc.conf /usr/lib/bxc
+        echo "libraries removed"
+        apt remove -y kubelet kubectl kubeadm
+        echo "k8s removed"
+        
+        echo "see you again!"
+    fi
+}
 case $1 in
     init )
         init
@@ -313,11 +333,14 @@ case $1 in
     bxcup )
         ins_bxcup
         ;;
-    check_env )
-        check_env
+    down_env )
+        down_env
         ;;
     report_v )
         report_V
+        ;;
+    remove )
+        remove
         ;;
     * )
         init
