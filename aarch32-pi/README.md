@@ -5,7 +5,9 @@ wget http://bonuscloud-imgs.oss.cn-north-1.jcloudcs.com/BonusCloud-LiteNode-rasp
 ```
 # 脚本安装模式
 ## TODO
-# APP Download
+```
+https://github.com/BonusCloud/BonusCloud-Node/tree/master/aarch32
+```
 ## Android APP Download(安卓APP下载)
 ```
 wget http://bonuscloud-imgs.oss.cn-north-1.jcloudcs.com/BonusCloud-LiteNode-admin-forPI.apk
@@ -14,7 +16,7 @@ wget http://bonuscloud-imgs.oss.cn-north-1.jcloudcs.com/BonusCloud-LiteNode-admi
 wget https://play.google.com/store/apps/details?id=io.bonuscloud.app
 ```
 ## IOS APP Download(IOS APP下载)
-## TODO
+### TODO
 # Support(支持）
 ```
 Raspberry Pi 1/Raspberry Pi 2/Raspberry Pi 3
