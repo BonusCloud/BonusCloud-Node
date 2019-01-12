@@ -1,11 +1,11 @@
 ### install
 Run as shell
 ```
-wget https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/aarch64/install.sh -O install.sh&&bash install.sh
+wget https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/aarch64/install.sh -O install.sh&&sudo bash install.sh
 ```
 ### remove
 ```
-wget https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/aarch64/install.sh -O install.sh&&bash install.sh remove
+wget https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/aarch64/install.sh -O install.sh&&sudo bash install.sh remove
 ```
 
 The system passed the test
