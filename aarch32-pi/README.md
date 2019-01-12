@@ -1,13 +1,14 @@
 # 镜像安装模式
-## RaspberryPi ROM Download(镜像下载)
+RaspberryPi ROM Download(镜像下载)
 ```
 wget http://bonuscloud-imgs.oss.cn-north-1.jcloudcs.com/BonusCloud-LiteNode-raspberryPi-armv7l.tar.bz2
 ```
 # 脚本安装模式
-## TODO
+参考
 ```
 https://github.com/BonusCloud/BonusCloud-Node/tree/master/aarch32
 ```
+# 绑定APP
 ## Android APP Download(安卓APP下载)
 ```
 wget http://bonuscloud-imgs.oss.cn-north-1.jcloudcs.com/BonusCloud-LiteNode-admin-forPI.apk
