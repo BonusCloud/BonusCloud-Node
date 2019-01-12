@@ -21,4 +21,5 @@ wget https://play.google.com/store/apps/details?id=io.bonuscloud.app
 # Support(支持）
 ```
 Raspberry Pi 1/Raspberry Pi 2/Raspberry Pi 3
+NanoPi-M1-Plus
 ```
