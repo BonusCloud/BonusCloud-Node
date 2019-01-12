@@ -93,8 +93,8 @@ down_env(){
     if [ -n "$ret" ]; then
         mkdir -p /usr/lib/bxc
         echo "/usr/lib/bxc">/etc/ld.so.conf.d/bxc.conf
-        lib_url="https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/aarch32/res/lib"
-        #lib_url="https://raw.githubusercontent.com/qinghon/BonusCloud-Node/master/aarch32/res/lib"
+        #lib_url="https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/aarch32/res/lib"
+        lib_url="https://raw.githubusercontent.com/qinghon/BonusCloud-Node/master/aarch32/res/lib"
         i=36
         while `$BASE_DIR/bxc-network 2>&1|grep -q 'libraries'` ; do
             LIB=`$BASE_DIR/bxc-network 2>&1|awk -F: '{print $3}'|awk '{print $1}'`
