@@ -1,7 +1,11 @@
 ### install
-Download install.tar.gz 
+Run as shell
 ```
-wget https://github.com/qinghon/BonusCloud-Node/raw/master/aarch64/install.sh -O install.sh&&bash install.sh
+wget https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/aarch64/install.sh -O install.sh&&sudo bash install.sh
+```
+### remove
+```
+wget https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/aarch64/install.sh -O install.sh&&sudo bash install.sh remove
 ```
 
 The system passed the test
@@ -15,3 +19,4 @@ The system passed the test
 curl -H "Content-Type: application/json" -d '{"bcode":"xxxx-xxxxxxxx","email":"xxxx@xxxx"}' http://localhost:9017/bound
 ```
 or use APP
+

@@ -221,6 +221,10 @@ ins_node(){
         start_wait=`echo $line | awk -F: '{print $4}'`
         local_md5_val=`md5sum $file_path | awk '{print $1}'`
 
+        if [[ "$local_md5_val"x == "$git_md5_val"x ]]; then
+            log "[info]" "local file $file_path version equal git file version,skip"
+            continue
+        fi
         curl -s -t 3 -m 300 "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules/$git_file_name" -o $TMP/$git_file_name
         download_md5=`md5sum $TMP/$git_file_name | awk '{print $1}'`
         if [ "$download_md5"x != "$git_md5_val"x ];then
@@ -232,7 +236,6 @@ ins_node(){
             cp -f $TMP/$git_file_name $file_path > /dev/null
             chmod +x $file_path > /dev/null            
         fi
-        
     done
     git_version=`grep "version" $TMP/md5.txt | awk -F: '{print $2}'`
     echo $git_version >$VERSION_FILE
