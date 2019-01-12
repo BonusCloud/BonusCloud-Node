@@ -8,7 +8,7 @@ wget http://bonuscloud-imgs.oss.cn-north-1.jcloudcs.com/BonusCloud-LiteNode-rasp
 ```
 https://github.com/BonusCloud/BonusCloud-Node/tree/master/aarch32
 ```
-# 绑定APP
+# 绑定APP Download
 ## Android APP Download(安卓APP下载)
 ```
 wget http://bonuscloud-imgs.oss.cn-north-1.jcloudcs.com/BonusCloud-LiteNode-admin-forPI.apk
