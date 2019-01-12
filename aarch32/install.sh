@@ -11,6 +11,7 @@ SSL_KEY="$BASE_DIR/client.key"
 VERSION_FILE="$BASE_DIR/VERSION"
 REPORT_URL="https://bxcvenus.com/idb/dev"
 
+TMP="tmp"
 LOG_FILE="ins.log"
 
 K8S_LOW="1.12.3"
@@ -34,7 +35,7 @@ check_doc(){
         return 1
     else
         doc_v=`docker version |grep Version|grep -o '[0-9\.]*'|head -n 1`
-        if version_ge $doc_v $doc_low ; then
+        if version_ge $doc_v $DOC_LOW ; then
             log "[info]" "docker version ok"
             return 0
         else
@@ -54,19 +55,19 @@ check_k8s(){
         k8s_adm=`kubeadm version|grep -o '\"v[0-9\.]*\"'|grep -o '[0-9\.]*'`
         k8s_let=`kubelet --version|grep -o '[0-9\.]*'`
         k8s_ctl=`kubectl  version --short --client|grep -o '[0-9\.]*'`
-        if version_ge $k8s_adm $k8s_low ; then
+        if version_ge $k8s_adm $K8S_LOW ; then
             log "[info]" "kubeadm version ok"
         else
             log "[info]" "kubeadm version fail"
             return 1
         fi
-        if version_ge $k8s_let $k8s_low ; then
+        if version_ge $k8s_let $K8S_LOW ; then
             log "[info]"  "kubelet version ok"
         else
             log "[info]"  "kubelet version fail"
             return 1
         fi
-        if version_ge $k8s_ctl $k8s_low ; then
+        if version_ge $k8s_ctl $K8S_LOW ; then
             log "[info]"  "kubectl version ok"
         else
             log "[info]"  "kubectl version fail"
@@ -86,29 +87,45 @@ check_apt(){
         log "[error]" "this is 32 system install script ,if you's not ,please install correspond system"
         exit 1
     fi
+    apt update
     apt install -y curl apt-transport-https
 }
 down_env(){
     ret=`$BASE_DIR/bxc-network 2>&1`
-    if [ -n "$ret" ]; then
-        mkdir -p /usr/lib/bxc
-        echo "/usr/lib/bxc">/etc/ld.so.conf.d/bxc.conf
-        #lib_url="https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/aarch32/res/lib"
-        lib_url="https://raw.githubusercontent.com/qinghon/BonusCloud-Node/master/aarch32/res/lib"
-        i=36
-        while `$BASE_DIR/bxc-network 2>&1|grep -q 'libraries'` ; do
-            LIB=`$BASE_DIR/bxc-network 2>&1|awk -F: '{print $3}'|awk '{print $1}'`
-            log "[info]" "$LIB will download"
-            wget "$lib_url/$LIB" -O /usr/lib/bxc/$LIB
-            ldconfig
-            if [[ $i -le 0 ]]; then
-                log "[error]" "`$BASE_DIR/bxc-network 2>&1`"
-                break
-            fi
-            i=`expr $i - 1`
-            echo "$i"
-        done
+    if [ -z "$ret" ]; then
+        return 0
+    fi 
+    mkdir -p /usr/lib/bxc
+    echo "/usr/lib/bxc">/etc/ld.so.conf.d/bxc.conf
+    #lib_url="https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/aarch32/res/lib"
+    lib_url="https://raw.githubusercontent.com/qinghon/BonusCloud-Node/master/aarch32/res/lib"
+    i=36
+    wget "$lib_url/lib_md5" -O $TMP/lib_md5
+    if [ ! -s "$TMP/lib_md5" ]; then
+        log "[error]" "wget \"$lib_url/lib_md5\" -O $TMP/lib_md5 ,you can try ./install.sh down_env"
+        return 1 
     fi
+    while `$BASE_DIR/bxc-network 2>&1|grep -q 'libraries'` ; do
+        LIB=`$BASE_DIR/bxc-network 2>&1|awk -F: '{print $3}'|awk '{print $1}'`
+        log "[info]" "$LIB will download"
+        wget "$lib_url/$LIB" -O /usr/lib/bxc/$LIB
+        local_md5=`md5sum /usr/lib/bxc/$LIB|awk '{print $1}'`
+        git_md5=`grep -F "$LIB" "$TMP/lib_md5"|awk '{print $1}'`
+        if [[ "$local_md5"x != "$git_md5"x ]]; then
+            log "[error]" "git lib file md5 $git_md5 not equal $local_md5 download lib file md5,try agin"
+            rm -f /usr/lib/bxc/$LIB
+            continue
+        else
+            ldconfig
+        fi
+        if [[ $i -le 0 ]]; then
+            log "[error]" "`$BASE_DIR/bxc-network 2>&1`"
+            break
+        fi
+        i=`expr $i - 1`
+        echo "$i"
+    done
+    
 }
 check_info(){
     if [ ! -s $NODE_INFO ]; then
@@ -145,9 +162,8 @@ init(){
     apt update 
     ins_docker
     mkdir -p /etc/cni/net.d
-    mkdir -p $BASE_DIR/scripts
-    mkdir -p $BASE_DIR/nodeapi 
-    mkdir -p $BASE_DIR/compute
+    mkdir -p $BASE_DIR/scripts $BASE_DIR/nodeapi $BASE_DIR/compute
+    mkdir -p $TMP
     check_info
 }
 
@@ -192,12 +208,12 @@ ins_conf(){
 }
 ins_node(){
     arch=`uname -m`
-    curl -s -t 3 -m 5 "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules/md5.txt" -o /tmp/md5.txt
-    if [ ! -s "/tmp/md5.txt" ]; then
-        log "[error]" "curl -s -t 3 -m 5 \"https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules/md5.txt\" -O /tmp/md5.txt"
+    curl -s -t 3 -m 5 "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules/md5.txt" -o $TMP/md5.txt
+    if [ ! -s "$TMP/md5.txt" ]; then
+        log "[error]" "curl -s -t 3 -m 5 \"https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules/md5.txt\" -O $TMP/md5.txt"
         return
     fi
-    for line in `grep "$arch" /tmp/md5.txt`
+    for line in `grep "$arch" $TMP/md5.txt`
     do
         git_file_name=`echo $line | awk -F: '{print $1}'`
         git_md5_val=`echo $line | awk -F: '{print $2}'`
@@ -205,20 +221,20 @@ ins_node(){
         start_wait=`echo $line | awk -F: '{print $4}'`
         local_md5_val=`md5sum $file_path | awk '{print $1}'`
 
-        curl -s -t 3 -m 300 "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules/$git_file_name" -o /tmp/$git_file_name
-        download_md5=`md5sum /tmp/$git_file_name | awk '{print $1}'`
+        curl -s -t 3 -m 300 "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules/$git_file_name" -o $TMP/$git_file_name
+        download_md5=`md5sum $TMP/$git_file_name | awk '{print $1}'`
         if [ "$download_md5"x != "$git_md5_val"x ];then
-            log "[error]" " download file /tmp/$git_file_name md5 $download_md5 different from git md5 $git_md5_val, ignore this update and continue ..."
+            log "[error]" " download file $TMP/$git_file_name md5 $download_md5 different from git md5 $git_md5_val, ignore this update and continue ..."
             continue
         else
-            log "[info]" " /tmp/$git_file_name download success."
+            log "[info]" " $TMP/$git_file_name download success."
             #cp -f $file_path ${file_path}.bak > /dev/null
-            cp -f /tmp/$git_file_name $file_path > /dev/null
+            cp -f $TMP/$git_file_name $file_path > /dev/null
             chmod +x $file_path > /dev/null            
         fi
         
     done
-    git_version=`grep "version" /tmp/md5.txt | awk -F: '{print $2}'`
+    git_version=`grep "version" $TMP/md5.txt | awk -F: '{print $2}'`
     echo $git_version >$VERSION_FILE
     cat <<EOF >/lib/systemd/system/bxc-node.service
 [Unit]
@@ -286,7 +302,7 @@ report_V(){
         if [ $status_code -eq 200 ];then
             log "[info]" "version $local_version reported success!"
         else
-            log "[error]" "version reported failed($status_code):curl -m 5 -k --cacert $SSL_CA --cert $SSL_CRT --key $SSL_KEY -H \"Content-Type: application/json\" -d \"{\"mac\":\"$mac\", \"info\":\"$local_version\"}\" -X PUT -w \"status_code:\"%{http_code}\" \"$REPORT_URL/$bcode\""
+            log "[error]" "version reported failed($status_code):curl -m 5 -k --cacert $SSL_CA --cert $SSL_CRT --key $SSL_KEY -H \"Content-Type: application/json\" -d \"{\"mac\":\"$mac\", \"info\":\"$local_version\",}\" -X PUT -w \"status_code:\"%{http_code}\" \"$REPORT_URL/$bcode\""
         fi
     }
     if [ ! -s $SSL_CA ] || [ ! -s $SSL_CRT ] || [ ! -s $SSL_KEY ] || [ ! -s $NODE_INFO ];then
@@ -309,7 +325,7 @@ report_V(){
     fi
 }
 remove(){
-    read -p "Are you sure all remove BonusCloud plugin? yes/n" CHOSE
+    read -p "Are you sure all remove BonusCloud plugin? yes/n:" CHOSE
     if [ -z $CHOSE ]; then
         exit 0
     elif [ "$CHOSE" == "n" -o "$CHOSE" == "N" -o "$CHOSE" == "no" ]; then
@@ -317,10 +333,11 @@ remove(){
     elif [ "$CHOSE" == "yes" -o "$CHOSE" == "YES" ]; then
         rm -rf /opt/bcloud /lib/systemd/system/bxc-node.service /etc/cron.daily/bxc-update
         echo "BonusCloud plugin removed"
-        apt remove -y kubelet kubectl kubeadm
-        echo "k8s removed"
         rm -rf /etc/ld.so.conf.d/bxc.conf /usr/lib/bxc
         echo "libraries removed"
+        apt remove -y kubelet kubectl kubeadm
+        echo "k8s removed"
+        
         echo "see you again!"
     fi
 }
