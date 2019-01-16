@@ -16,6 +16,7 @@ LOG_FILE="ins.log"
 
 K8S_LOW="1.12.3"
 DOC_LOW="1.11.1"
+DOC_HIG="18.06.1"
 
 log(){
     if [ "$1" = "[error]" ]; then
@@ -28,6 +29,7 @@ log(){
     fi
 }
 function version_ge() { test "$(echo "$@" | tr " " "\n" | sort -rV | head -n 1)" == "$1"; }
+function version_le() { test "$(echo "$@" | tr " " "\n" | sort -V | head -n 1)" == "$1"; }
 check_doc(){
     retd=`which docker>/dev/null;echo $?`
     if [ $retd -ne 0 ]; then
@@ -35,8 +37,8 @@ check_doc(){
         return 1
     else
         doc_v=`docker version |grep Version|grep -o '[0-9\.]*'|head -n 1`
-        if version_ge $doc_v $DOC_LOW ; then
-            log "[info]" "docker version ok"
+        if version_ge $doc_v $DOC_LOW && version_le $doc_v $DOC_HIG ; then
+            log "[info]" "docker version above $DOC_LOW and below $DOC_HIG"
             return 0
         else
             log "[info]" "docker version fail"
@@ -144,7 +146,18 @@ check_info(){
 }
 ins_docker(){
     if ! check_doc ; then
-        apt install -y docker.io
+        curl -fsSL https://download.docker.com/linux/debian/gpg | apt-key add -
+        echo "deb https://download.docker.com/linux/$(lsb_release -is|tr 'A-Z' 'a-z')  $(lsb_release -cs) stable"  >/etc/apt/sources.list.d/docker.list
+        apt update
+        for line in `apt-cache madison docker-ce|awk '{print $3}'` ; do
+            if version_le `echo $line |egrep -o '([0-9]+\.){2}[0-9]+'` $DOC_HIG ; then
+                apt-mark unhold docker-ce
+                apt install -y --allow-downgrades docker-ce=$line 
+                log "[info]" "apt install -y --allow-downgrades docker-ce=$line "
+                break
+            fi
+        done
+        apt-mark hold docker-ce
     else
         log "[info]" " docker was found! skiped"
     fi
