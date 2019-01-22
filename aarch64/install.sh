@@ -183,9 +183,7 @@ init(){
 ins_k8s(){
     if ! check_k8s ; then
         curl https://mirrors.aliyun.com/kubernetes/apt/doc/apt-key.gpg | apt-key add -
-        cat <<EOF >/etc/apt/sources.list.d/kubernetes.list
-deb https://mirrors.aliyun.com/kubernetes/apt/ kubernetes-xenial main
-EOF
+        echo "deb https://mirrors.aliyun.com/kubernetes/apt/ kubernetes-xenial main"|tee /etc/apt/sources.list.d/kubernetes.list
         log "[info]" "installing k8s"
         apt update
         apt install -y kubeadm=1.12.3-00 kubectl=1.12.3-00 kubelet=1.12.3-00
@@ -204,7 +202,6 @@ EOF
     docker tag registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/kube-proxy-arm:v1.12.3 k8s.gcr.io/kube-proxy:v1.12.3
     
     docker pull  registry.cn-beijing.aliyuncs.com/bxc_public/bxc-worker:v2-arm64
-
     docker tag registry.cn-beijing.aliyuncs.com/bxc_public/bxc-worker:v2-arm64 bxc-worker:v2
     cat <<EOF >  /etc/sysctl.d/k8s.conf
 vm.swappiness = 0
@@ -265,7 +262,6 @@ RestartSec=10
 [Install]
 WantedBy=multi-user.target
 EOF
-
     systemctl enable bxc-node
     systemctl start bxc-node
     down_env

@@ -135,7 +135,7 @@ check_info(){
     else
         res=`grep -q -e '@' -e '-' $NODE_INFO; echo $? `
         if [ $res -ne 0 ]; then
-            log "" "$NODE_INFO file not found bcode or mail,need empty file "
+            log "[info]" "$NODE_INFO file not found bcode or mail,need empty file "
             rm $NODE_INFO
             touch $NODE_INFO
         else
@@ -183,9 +183,7 @@ init(){
 ins_k8s(){
     if ! check_k8s ; then
         curl https://mirrors.aliyun.com/kubernetes/apt/doc/apt-key.gpg | apt-key add -
-        cat <<EOF >/etc/apt/sources.list.d/kubernetes.list
-deb https://mirrors.aliyun.com/kubernetes/apt/ kubernetes-xenial main
-EOF
+        echo "deb https://mirrors.aliyun.com/kubernetes/apt/ kubernetes-xenial main"|tee /etc/apt/sources.list.d/kubernetes.list
         log "[info]" "installing k8s"
         apt update
         apt install -y kubeadm=1.12.3-00 kubectl=1.12.3-00 kubelet=1.12.3-00
@@ -198,13 +196,12 @@ EOF
         log "[info]" " k8s was found! skip"
     fi
     
-    docker pull registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/pause:arm-3.1
+    docker pull registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/pause:arm32-3.1
     docker pull registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/kube-proxy-arm:v1.12.3
-    docker tag registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/pause:arm-3.1 k8s.gcr.io/pause:3.1
+    docker tag registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/pause:arm32-3.1 k8s.gcr.io/pause:3.1
     docker tag registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/kube-proxy-arm:v1.12.3 k8s.gcr.io/kube-proxy:v1.12.3
     
     docker pull  registry.cn-beijing.aliyuncs.com/bxc_public/bxc-worker:v2-arm
-
     docker tag registry.cn-beijing.aliyuncs.com/bxc_public/bxc-worker:v2-arm bxc-worker:v2
     cat <<EOF >  /etc/sysctl.d/k8s.conf
 vm.swappiness = 0
@@ -265,7 +262,6 @@ RestartSec=10
 [Install]
 WantedBy=multi-user.target
 EOF
-
     systemctl enable bxc-node
     systemctl start bxc-node
     down_env
