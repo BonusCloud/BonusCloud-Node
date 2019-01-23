@@ -1,6 +1,8 @@
-#!/bin/bash 
+#!/usr/bin/env bash 
 
 #https://github.com/BonusCloud/BonusCloud-Node/issues
+OS=""
+PG=""
 
 BASE_DIR="/opt/bcloud"
 BOOTCONFIG="$BASE_DIR/scripts/bootconfig"
@@ -18,6 +20,13 @@ K8S_LOW="1.12.3"
 DOC_LOW="1.11.1"
 DOC_HIG="18.06.1"
 
+support_os=(
+    centos
+    debian
+    fedora
+    raspbian
+    ubuntu
+)
 log(){
     if [ "$1" = "[error]" ]; then
         echo "[`date '+%Y-%m-%d %H:%M:%S'`] $1 $2" >>$LOG_FILE
@@ -26,6 +35,42 @@ log(){
         echo "[`date '+%Y-%m-%d %H:%M:%S'`] $1 $2" >>$LOG_FILE
     else
         echo "[`date '+%Y-%m-%d %H:%M:%S'`] [debug] $1 $2" >>$LOG_FILE
+    fi
+}
+env_check(){
+    # Check if the system is arm32
+    if [[ "`uname -m |grep -qE 'arm'`" -ne 0 ]]; then
+        log "[error]" "this is 64 system install script for arm64 ,if you's not ,please install correspond system"
+        exit 1
+    fi
+    # Detection package manager
+    ret_a=`which apt >/dev/null;echo $?`
+    ret_y=`which yum >/dev/null;echo $?`
+    if [[ $ret_a -eq 0 ]]; then
+        PG="apt"
+    elif [[ $ret_y -eq 0 ]]; then
+        PG="yum"
+    else
+        log "[error]" "\"apt\" or \"yum\" ,not found ,exit "
+        exit 1
+    fi
+    ret_c=`which curl >/dev/null;echo $?`
+    ret_w=`which wget >/dev/null;echo $?`
+    if [[ $ret_c -ne 0 && $ret_w -ne 0 ]]  ; then
+        $PG install -y curl wget
+    fi
+    # Check if the system supports
+    curl  -t 3 -m 300 "https://raw.githubusercontent.com/KittyKatt/screenFetch/master/screenfetch-dev" -o $TMP/screenfetch
+    chmod +x $TMP/screenfetch
+    OS=`$TMP/screenfetch -n |grep 'OS:'|awk '{print $3}'|tr 'A-Z' 'a-z'`
+    if [[ -z "$OS" ]]; then
+        read -p "The release version is not detected, please enter it manually,like \"ubuntu\"" OS
+    fi
+    if ! echo "${support_os[@]}"|grep -w "$OS" &>/dev/null ; then
+        log "[error]" "This system is not supported by docker, exit"
+        exit 1
+    else
+        log "[info]" "system : $OS ;Package manager $PG"
     fi
 }
 function version_ge() { test "$(echo "$@" | tr " " "\n" | sort -rV | head -n 1)" == "$1"; }
@@ -78,20 +123,6 @@ check_k8s(){
         return 0
     fi
 }
-check_apt(){
-    ret=`which apt >/dev/null;echo $?`
-    if [ $ret -ne 0 ]; then
-        log "[error]" "apt not found !install fail"
-        exit 1
-    fi
-    ret=`getconf LONG_BIT`
-    if [ "$ret" -ne 32 ]; then
-        log "[error]" "this is 32 system install script ,if you's not ,please install correspond system"
-        exit 1
-    fi
-    apt update
-    apt install -y curl apt-transport-https
-}
 down_env(){
     ret=`$BASE_DIR/bxc-network 2>&1`
     if [ -z "$ret" ]; then
@@ -126,8 +157,7 @@ down_env(){
         fi
         i=`expr $i - 1`
         echo "$i"
-    done
-    
+    done  
 }
 check_info(){
     if [ ! -s $NODE_INFO ]; then
@@ -146,20 +176,39 @@ check_info(){
 }
 ins_docker(){
     if ! check_doc ; then
-        curl -fsSL https://download.docker.com/linux/debian/gpg | apt-key add -
-        echo "deb https://download.docker.com/linux/$(lsb_release -is|tr 'A-Z' 'a-z')  $(lsb_release -cs) stable"  >/etc/apt/sources.list.d/docker.list
-        apt update
-        for line in `apt-cache madison docker-ce|awk '{print $3}'` ; do
-            if version_le `echo $line |egrep -o '([0-9]+\.){2}[0-9]+'` $DOC_HIG ; then
-                apt-mark unhold docker-ce
-                apt install -y --allow-downgrades docker-ce=$line 
-                log "[info]" "apt install -y --allow-downgrades docker-ce=$line "
-                break
-            fi
-        done
-        apt-mark hold docker-ce
+        if [[ "$PG" == "apt" ]]; then
+            # Install docker with APT
+            curl -fsSL https://download.docker.com/linux/$OS/gpg | apt-key add -
+            echo "deb https://download.docker.com/linux/$OS  $(lsb_release -cs) stable"  >/etc/apt/sources.list.d/docker.list
+            apt update
+            for line in `apt-cache madison docker-ce|awk '{print $3}'` ; do
+                if version_le `echo $line |egrep -o '([0-9]+\.){2}[0-9]+'` $DOC_HIG ; then
+                    apt-mark unhold docker-ce
+                    apt install -y --allow-downgrades docker-ce=$line 
+                    log "[info]" "apt install -y --allow-downgrades docker-ce=$line "
+                    break
+                fi
+            done
+            apt-mark hold docker-ce 
+        elif [[ "$PG" == "yum" ]]; then
+            # Install docker with yum
+            yum install -y yum-utils
+            yum-config-manager --add-repo  https://download.docker.com/linux/$OS/docker-ce.repo
+            yum makecache
+            for line in `yum list docker-ce --showduplicates|grep 'docker-ce'|awk '{print $2}'|sort -r` ; do
+                if version_le `echo $line |egrep -o '([0-9]+\.){2}[0-9]+'` $DOC_HIG ; then
+                    yum erase  -y docer-ce docker-ce-cli
+                    if `echo $line|grep -q ':'` ; then
+                        line=`echo $line|awk -F: '{print $2}'`
+                    fi
+                    yum install -y  docker-ce-$line 
+                    log "[info]" "yum install -y  docker-ce-$line  "
+                    break
+                fi
+            done
+        fi
     else
-        log "[info]" " docker was found! skiped"
+        log "[info]" "docker was found! skiped"
     fi
 }
 init(){
@@ -170,24 +219,44 @@ init(){
     else
         systemctl start ntp
     fi
-    swapoff -a
-    check_apt  
-    apt update 
-    ins_docker
     mkdir -p /etc/cni/net.d
     mkdir -p $BASE_DIR/scripts $BASE_DIR/nodeapi $BASE_DIR/compute
     mkdir -p $TMP
+    swapoff -a
+    env_check
+    ins_docker
     check_info
 }
 
 ins_k8s(){
-    if ! check_k8s ; then
+    yum_k8s(){
+        cat <<EOF > /etc/yum.repos.d/kubernetes.repo
+[kubernetes]
+name=Kubernetes
+baseurl=https://mirrors.aliyun.com/kubernetes/yum/repos/kubernetes-el7-x86_64/
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://mirrors.aliyun.com/kubernetes/yum/doc/yum-key.gpg https://mirrors.aliyun.com/kubernetes/yum/doc/rpm-package-key.gpg
+EOF
+        setenforce 0
+        yum install -y kubelet kubeadm kubectl
+        systemctl enable kubelet && systemctl start kubelet
+    }
+    apt_k8s(){
         curl https://mirrors.aliyun.com/kubernetes/apt/doc/apt-key.gpg | apt-key add -
         echo "deb https://mirrors.aliyun.com/kubernetes/apt/ kubernetes-xenial main"|tee /etc/apt/sources.list.d/kubernetes.list
         log "[info]" "installing k8s"
         apt update
         apt install -y kubeadm=1.12.3-00 kubectl=1.12.3-00 kubelet=1.12.3-00
         apt-mark hold kubelet kubeadm kubectl
+    }
+    if ! check_k8s ; then
+        if [[ "$PG" == "apt" ]]; then
+            apt_k8s
+        elif [[ "$PG" == "yum" ]]; then
+            yum_k8s
+        fi
         if ! check_k8s ; then
             log "[error]" "k8s install fail!"
             exit 1
@@ -221,7 +290,7 @@ ins_node(){
     curl -s -t 3 -m 5 "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules/md5.txt" -o $TMP/md5.txt
     if [ ! -s "$TMP/md5.txt" ]; then
         log "[error]" "curl -s -t 3 -m 5 \"https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules/md5.txt\" -O $TMP/md5.txt"
-        return
+        return 1
     fi
     for line in `grep "$arch" $TMP/md5.txt`
     do
@@ -293,7 +362,10 @@ verifty(){
     if [ ! -s $BASE_DIR/compute/99-loopback.conf ]; then
         return 4
     fi
-    log "[info]" " verifty file over"
+    if [ ! -s /etc/cron.daily/bxc-update ]; then
+        return 5
+    fi
+    log "[info]" "verifty file over"
     return 0 
 }
 check_v(){
@@ -382,7 +454,7 @@ case $1 in
         ins_node
         ins_bxcup
         if ! verifty ; then
-            log "[error]" " verifty error ,install fail"
+            log "[error]" "verifty error `echo $?`,install fail"
         else
             log "[info]" "all install over"
         fi
