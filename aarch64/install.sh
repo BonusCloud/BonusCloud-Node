@@ -344,6 +344,17 @@ EOF
 }
 
 ins_bxcup(){
+    ret_ct=`which crontab >/dev/null;echo $?`
+    if [[ $ret_ct -ne 0 ]]; then
+        if [[ "$PG" == "apt" ]]; then
+            apt install -y cron
+            systemctl enable cron&&systemctl start cron
+        elif [[ "$PG" == "yum" ]]; then
+            yum install -y crontabs cronie
+            systemctl enable crond&&systemctl start crond
+        fi
+    fi
+    [ ! -d /etc/cron.daily ] && mkdir -p /etc/cron.daily && echo -e "`date '+%M %H'`\t* * *\troot\tcd / && run-parts --report /etc/cron.daily" >>/etc/crontab
     wget https://github.com/BonusCloud/BonusCloud-Node/raw/master/aarch64/res/bxc-update -O /etc/cron.daily/bxc-update
     chmod +x /etc/cron.daily/bxc-update
     log "[info]"" install bxc_update over"
