@@ -324,7 +324,7 @@ Description=bxc node app
 After=network.target
 
 [Service]
-ExecStart=/opt/bcloud/nodeapi/node
+ExecStart=/opt/bcloud/nodeapi/node --alsologtostderr
 Restart=always
 RestartSec=10
 
