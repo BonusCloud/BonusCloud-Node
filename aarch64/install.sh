@@ -27,6 +27,7 @@ support_os=(
     raspbian
     ubuntu
 )
+mkdir -p $TMP
 log(){
     if [ "$1" = "[error]" ]; then
         echo "[`date '+%Y-%m-%d %H:%M:%S'`] $1 $2" >>$LOG_FILE
@@ -39,7 +40,7 @@ log(){
 }
 env_check(){
     # Check if the system is arm64
-    if [[ "`uname -m |grep -qE 'aarch64'`" -ne 0 ]]; then
+    if [[ "`uname -m |grep -qE 'aarch64';echo $?`" -ne 0 ]]; then
         log "[error]" "this is 64 system install script for arm64 ,if you's not ,please install correspond system"
         exit 1
     fi
@@ -221,7 +222,6 @@ init(){
     fi
     mkdir -p /etc/cni/net.d
     mkdir -p $BASE_DIR/scripts $BASE_DIR/nodeapi $BASE_DIR/compute
-    mkdir -p $TMP
     swapoff -a
     env_check
     ins_docker
@@ -298,7 +298,7 @@ ins_node(){
         git_md5_val=`echo $line | awk -F: '{print $2}'`
         file_path=`echo $line | awk -F: '{print $3}'`
         start_wait=`echo $line | awk -F: '{print $4}'`
-        local_md5_val=`md5sum $file_path | awk '{print $1}'`
+        local_md5_val=`[ -x $file_path ] && md5sum $file_path | awk '{print $1}'`
 
         if [[ "$local_md5_val"x == "$git_md5_val"x ]]; then
             log "[info]" "local file $file_path version equal git file version,skip"
