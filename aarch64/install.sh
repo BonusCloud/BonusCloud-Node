@@ -436,6 +436,19 @@ remove(){
         echo "see you again!"
     fi
 }
+help(){
+    echo "bash $0 [option]" 
+    echo -e "\t-h \t\tPrint this and exit"
+    echo -e "\tinit \t\tInstallation environment check and initialization"
+    echo -e "\tk8s \t\tInstall the k8s environment and the k8s components that" 
+    echo -e "\t\t\tBonusCloud depends on"
+    echo -e "\tnode \t\tInstall node management components"
+    echo -e "\tdown_env \tDownload the bxc-worker runtime environment"
+    echo -e "\treport_v \tUpload version information, install node if version"
+    echo -e "\t\t\tinformation does not exist"
+    echo -e "\tremove \t\tFully remove bonuscloud plug-ins and components"
+    exit 0
+}
 case $1 in
     init )
         init
@@ -457,6 +470,9 @@ case $1 in
         ;;
     remove )
         remove
+        ;;
+    -h|--help )
+        help $0
         ;;
     * )
         init
