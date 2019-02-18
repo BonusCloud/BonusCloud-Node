@@ -304,10 +304,10 @@ ins_node(){
             log "[info]" "local file $file_path version equal git file version,skip"
             continue
         fi
-        curl -s -t 3 -m 300 "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules/$git_file_name" -o $TMP/$git_file_name
+        curl -t 3 -m 300 "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules/$git_file_name" -o $TMP/$git_file_name
         download_md5=`md5sum $TMP/$git_file_name | awk '{print $1}'`
         if [ "$download_md5"x != "$git_md5_val"x ];then
-            log "[error]" " download file $TMP/$git_file_name md5 $download_md5 different from git md5 $git_md5_val, ignore this update and continue ..."
+            log "[error]" " download file $TMP/$git_file_name md5 $download_md5 different from git md5 $git_md5_val"
             continue
         else
             log "[info]" " $TMP/$git_file_name download success."
