@@ -186,7 +186,12 @@ ins_docker(){
                 if version_le `echo $line |egrep -o '([0-9]+\.){2}[0-9]+'` $DOC_HIG ; then
                     apt-mark unhold docker-ce
                     apt install -y --allow-downgrades docker-ce=$line 
-                    log "[info]" "apt install -y --allow-downgrades docker-ce=$line "
+                    if ! check_doc ; then
+                    	log "[error]" "docker install fail,please check Apt environment"
+                    	exit 1
+                    else
+                    	log "[info]" "apt install -y --allow-downgrades docker-ce=$line "
+                    fi
                     break
                 fi
             done
@@ -203,7 +208,12 @@ ins_docker(){
                         line=`echo $line|awk -F: '{print $2}'`
                     fi
                     yum install -y  docker-ce-$line 
-                    log "[info]" "yum install -y  docker-ce-$line  "
+                    if ! check_doc ; then
+                    	log "[error]" "docker install fail,please check yum environment"
+                    	exit 1
+                    else
+                    	log "[info]" "yum install -y  docker-ce-$line "
+                    fi
                     break
                 fi
             done
