@@ -61,7 +61,7 @@ env_check(){
         $PG install -y curl wget
     fi
     # Check if the system supports
-    curl  -t 3 -m 300 "https://raw.githubusercontent.com/KittyKatt/screenFetch/master/screenfetch-dev" -o $TMP/screenfetch
+    curl -L -o $TMP/screenfetch "https://raw.githubusercontent.com/KittyKatt/screenFetch/master/screenfetch-dev" 
     chmod +x $TMP/screenfetch
     OS=`$TMP/screenfetch -n |grep 'OS:'|awk '{print $3}'|tr 'A-Z' 'a-z'`
     if [[ -z "$OS" ]]; then
@@ -254,7 +254,7 @@ EOF
         systemctl enable kubelet && systemctl start kubelet
     }
     apt_k8s(){
-        curl https://mirrors.aliyun.com/kubernetes/apt/doc/apt-key.gpg | apt-key add -
+        curl -L https://mirrors.aliyun.com/kubernetes/apt/doc/apt-key.gpg | apt-key add -
         echo "deb https://mirrors.aliyun.com/kubernetes/apt/ kubernetes-xenial main"|tee /etc/apt/sources.list.d/kubernetes.list
         log "[info]" "installing k8s"
         apt update
@@ -297,9 +297,9 @@ ins_conf(){
 }
 ins_node(){
     arch=`uname -m`
-    curl -s -t 3 -m 5 "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules/md5.txt" -o $TMP/md5.txt
+    curl -SL "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules/md5.txt" -o $TMP/md5.txt
     if [ ! -s "$TMP/md5.txt" ]; then
-        log "[error]" "curl -s -t 3 -m 5 \"https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules/md5.txt\" -O $TMP/md5.txt"
+        log "[error]" "curl -SL \"https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules/md5.txt\" -O $TMP/md5.txt"
         return 1
     fi
     for line in `grep "$arch" $TMP/md5.txt`
@@ -314,7 +314,7 @@ ins_node(){
             log "[info]" "local file $file_path version equal git file version,skip"
             continue
         fi
-        curl -t 3 -m 300 "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules/$git_file_name" -o $TMP/$git_file_name
+        curl -SL "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules/$git_file_name" -o $TMP/$git_file_name
         download_md5=`md5sum $TMP/$git_file_name | awk '{print $1}'`
         if [ "$download_md5"x != "$git_md5_val"x ];then
             log "[error]" " download file $TMP/$git_file_name md5 $download_md5 different from git md5 $git_md5_val"
@@ -403,11 +403,11 @@ report_V(){
         local_version=`cat $VERSION_FILE`
         mac=`ip addr list dev eth0 | grep "ether" | awk '{print $2}'`
         bcode=` cat $NODE_INFO |sed 's/,/\n/g' | grep "bcode" | awk -F: '{print $NF}' | sed 's/"//g'`
-        status_code=`curl -m 5 -k --cacert $SSL_CA --cert $SSL_CRT --key $SSL_KEY -H "Content-Type: application/json" -d "{\"mac\":\"$mac\", \"info\":\"$local_version\"}" -X PUT -w "\nstatus_code:"%{http_code}"\n" "$REPORT_URL/$bcode" | grep "status_code" | awk -F: '{print $2}'`
+        status_code=`curl -SL -k --cacert $SSL_CA --cert $SSL_CRT --key $SSL_KEY -H "Content-Type: application/json" -d "{\"mac\":\"$mac\", \"info\":\"$local_version\"}" -X PUT -w "\nstatus_code:"%{http_code}"\n" "$REPORT_URL/$bcode" | grep "status_code" | awk -F: '{print $2}'`
         if [ $status_code -eq 200 ];then
             log "[info]" "version $local_version reported success!"
         else
-            log "[error]" "version reported failed($status_code):curl -m 5 -k --cacert $SSL_CA --cert $SSL_CRT --key $SSL_KEY -H \"Content-Type: application/json\" -d \"{\"mac\":\"$mac\", \"info\":\"$local_version\",}\" -X PUT -w \"status_code:\"%{http_code}\" \"$REPORT_URL/$bcode\""
+            log "[error]" "version reported failed($status_code):curl -SL -k --cacert $SSL_CA --cert $SSL_CRT --key $SSL_KEY -H \"Content-Type: application/json\" -d \"{\"mac\":\"$mac\", \"info\":\"$local_version\",}\" -X PUT -w \"status_code:\"%{http_code}\" \"$REPORT_URL/$bcode\""
         fi
     }
     if [ ! -s $SSL_CA ] || [ ! -s $SSL_CRT ] || [ ! -s $SSL_KEY ] || [ ! -s $NODE_INFO ];then
