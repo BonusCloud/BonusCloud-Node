@@ -1,4 +1,4 @@
-version:v0.3.11
+version:v0.4.0
 node_aarch64:583b3e4735fb81de084a83a53925eccf:/opt/bcloud/nodeapi/node:5
 node_armv7l:bf416f278eeae408a9faba7d7cdcd45c:/opt/bcloud/nodeapi/node:5
 node_x86-64:b0abba7c1f0a84a845933f1be6774237:/opt/bcloud/nodeapi/node:5
