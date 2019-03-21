@@ -297,9 +297,15 @@ ins_conf(){
 }
 ins_node(){
     arch=`uname -m`
-    curl -SL "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules/md5.txt" -o $TMP/md5.txt
+    kel_v=`uname -r|egrep  -o '([0-9]+\.){2}[0-9]'`
+    link="https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules"
+    if  version_ge $kel_v "5.0.0" ; then
+        link="$link/5.0.0-aml-N1-BonusCloud"
+    fi
+    log "[info]" "link=$link"
+    curl -SL "$link/md5.txt" -o $TMP/md5.txt
     if [ ! -s "$TMP/md5.txt" ]; then
-        log "[error]" "curl -SL \"https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules/md5.txt\" -O $TMP/md5.txt"
+        log "[error]" "curl -SL \"$link/md5.txt\" -O $TMP/md5.txt"
         return 1
     fi
     for line in `grep "$arch" $TMP/md5.txt`
@@ -314,7 +320,7 @@ ins_node(){
             log "[info]" "local file $file_path version equal git file version,skip"
             continue
         fi
-        curl -SL "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules/$git_file_name" -o $TMP/$git_file_name
+        curl -SL "$link/$git_file_name" -o $TMP/$git_file_name
         download_md5=`md5sum $TMP/$git_file_name | awk '{print $1}'`
         if [ "$download_md5"x != "$git_md5_val"x ];then
             log "[error]" " download file $TMP/$git_file_name md5 $download_md5 different from git md5 $git_md5_val"
