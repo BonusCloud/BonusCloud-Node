@@ -303,7 +303,7 @@ ins_node(){
         link="$link/5.0.0-aml-N1-BonusCloud"
     fi
     log "[info]" "link=$link"
-    curl -SL "$link/md5.txt" -o $TMP/md5.txt
+    wget -q --show-progress "$link/md5.txt" -O $TMP/md5.txt
     if [ ! -s "$TMP/md5.txt" ]; then
         log "[error]" "curl -SL \"$link/md5.txt\" -O $TMP/md5.txt"
         return 1
@@ -320,7 +320,7 @@ ins_node(){
             log "[info]" "local file $file_path version equal git file version,skip"
             continue
         fi
-        curl -SL "$link/$git_file_name" -o $TMP/$git_file_name
+        wget -q --show-progress "$link/$git_file_name" -O $TMP/$git_file_name 
         download_md5=`md5sum $TMP/$git_file_name | awk '{print $1}'`
         if [ "$download_md5"x != "$git_md5_val"x ];then
             log "[error]" " download file $TMP/$git_file_name md5 $download_md5 different from git md5 $git_md5_val"
@@ -362,16 +362,19 @@ EOF
 ins_bxcup(){
     ret_ct=`which crontab >/dev/null;echo $?`
     if [[ $ret_ct -ne 0 ]]; then
-        if [[ "$PG" == "apt" ]]; then
-            apt install -y cron
-            systemctl enable cron&&systemctl start cron
-        elif [[ "$PG" == "yum" ]]; then
-            yum install -y crontabs cronie
-            systemctl enable crond&&systemctl start crond
-        fi
+        case $PG in
+            apt )
+                apt install -y cron
+                systemctl enable cron&&systemctl start cron
+                ;;
+            yum )
+                yum install -y crontabs cronie
+                systemctl enable crond&&systemctl start crond
+                ;;
+        esac
     fi
     [ ! -d /etc/cron.daily ] && mkdir -p /etc/cron.daily && echo -e "`date '+%M %H'`\t* * *\troot\tcd / && run-parts --report /etc/cron.daily" >>/etc/crontab
-    wget https://github.com/BonusCloud/BonusCloud-Node/raw/master/aarch32/res/bxc-update -O /etc/cron.daily/bxc-update
+    wget -O /etc/cron.daily/bxc-update https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/aarch32/res/bxc-update 
     chmod +x /etc/cron.daily/bxc-update
     log "[info]"" install bxc_update over"
 }
