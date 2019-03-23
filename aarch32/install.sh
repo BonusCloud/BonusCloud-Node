@@ -27,6 +27,10 @@ support_os=(
     raspbian
     ubuntu
 )
+mirror_pods=(
+    "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master"
+    "https://raw.githubusercontent.com/qinghon/BonusCloud-Node/master"
+)
 mkdir -p $TMP
 log(){
     if [ "$1" = "[error]" ]; then
@@ -73,6 +77,18 @@ env_check(){
     else
         log "[info]" "system : $OS ;Package manager $PG"
     fi
+}
+down(){
+    for link in ${mirror_pods[@]}; do
+        wget  -nv --show-progress "$link/$1" -O $2
+        if [[ $? -eq 0 ]]; then
+            break
+        else
+            continue
+        fi
+        log "[error]" "Download $link/$1 failed"
+    done
+    return 1
 }
 function version_ge() { test "$(echo "$@" | tr " " "\n" | sort -rV | head -n 1)" == "$1"; }
 function version_le() { test "$(echo "$@" | tr " " "\n" | sort -V | head -n 1)" == "$1"; }
@@ -131,10 +147,9 @@ down_env(){
     fi 
     mkdir -p /usr/lib/bxc
     echo "/usr/lib/bxc">/etc/ld.so.conf.d/bxc.conf
-    #lib_url="https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/aarch32/res/lib"
-    lib_url="https://raw.githubusercontent.com/qinghon/BonusCloud-Node/master/aarch32/res/lib"
+    lib_url="aarch32/res/lib"
     i=36
-    wget "$lib_url/lib_md5" -O $TMP/lib_md5
+    down "$lib_url/lib_md5" "$TMP/lib_md5"
     if [ ! -s "$TMP/lib_md5" ]; then
         log "[error]" "wget \"$lib_url/lib_md5\" -O $TMP/lib_md5 ,you can try ./install.sh down_env"
         return 1 
@@ -142,7 +157,7 @@ down_env(){
     while `$BASE_DIR/bxc-network 2>&1|grep -q 'libraries'` ; do
         LIB=`$BASE_DIR/bxc-network 2>&1|awk -F: '{print $3}'|awk '{print $1}'`
         log "[info]" "$LIB will download"
-        wget "$lib_url/$LIB" -O /usr/lib/bxc/$LIB
+        down "$lib_url/$LIB" "/usr/lib/bxc/$LIB"
         local_md5=`md5sum /usr/lib/bxc/$LIB|awk '{print $1}'`
         git_md5=`grep -F "$LIB" "$TMP/lib_md5"|awk '{print $1}'`
         if [[ "$local_md5"x != "$git_md5"x ]]; then
@@ -231,7 +246,7 @@ init(){
         systemctl start ntp
     fi
     mkdir -p /etc/cni/net.d
-    mkdir -p $BASE_DIR/scripts $BASE_DIR/nodeapi $BASE_DIR/compute
+    mkdir -p $BASE_DIR/{scripts,nodeapi,compute}
     swapoff -a
     env_check
     ins_docker
@@ -292,20 +307,19 @@ EOF
     log "[info]" "k8s install over"
 }
 ins_conf(){
-    wget https://github.com/BonusCloud/BonusCloud-Node/raw/master/aarch32/res/compute/10-mynet.conflist -O $BASE_DIR/compute/10-mynet.conflist
-    wget https://github.com/BonusCloud/BonusCloud-Node/raw/master/aarch32/res/compute/99-loopback.conf -O $BASE_DIR/compute/99-loopback.conf
+    down "aarch32/res/compute/10-mynet.conflist" "$BASE_DIR/compute/10-mynet.conflist"
+    down "aarch32/res/compute/99-loopback.conf" "$BASE_DIR/compute/99-loopback.conf"
 }
 ins_node(){
     arch=`uname -m`
     kel_v=`uname -r|egrep  -o '([0-9]+\.){2}[0-9]'`
-    link="https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules"
+    Rlink="img-modules"
     if  version_ge $kel_v "5.0.0" ; then
-        link="$link/5.0.0-aml-N1-BonusCloud"
+        Rlink="$Rlink/5.0.0-aml-N1-BonusCloud"
     fi
-    log "[info]" "link=$link"
-    wget -q --show-progress "$link/md5.txt" -O $TMP/md5.txt
+    down "$Rlink/md5.txt" "$TMP/md5.txt"
     if [ ! -s "$TMP/md5.txt" ]; then
-        log "[error]" "curl -SL \"$link/md5.txt\" -O $TMP/md5.txt"
+        log "[error]" "wget \"$Rlink/md5.txt\" -O $TMP/md5.txt"
         return 1
     fi
     for line in `grep "$arch" $TMP/md5.txt`
@@ -315,12 +329,13 @@ ins_node(){
         file_path=`echo $line | awk -F: '{print $3}'`
         start_wait=`echo $line | awk -F: '{print $4}'`
         local_md5_val=`[ -x $file_path ] && md5sum $file_path | awk '{print $1}'`
+        mod=`echo $line | awk -F: '{print $5}'`
 
         if [[ "$local_md5_val"x == "$git_md5_val"x ]]; then
             log "[info]" "local file $file_path version equal git file version,skip"
             continue
         fi
-        wget -q --show-progress "$link/$git_file_name" -O $TMP/$git_file_name 
+        down "$Rlink/$git_file_name" "$TMP/$git_file_name" 
         download_md5=`md5sum $TMP/$git_file_name | awk '{print $1}'`
         if [ "$download_md5"x != "$git_md5_val"x ];then
             log "[error]" " download file $TMP/$git_file_name md5 $download_md5 different from git md5 $git_md5_val"
@@ -329,7 +344,7 @@ ins_node(){
             log "[info]" " $TMP/$git_file_name download success."
             #cp -f $file_path ${file_path}.bak > /dev/null
             cp -f $TMP/$git_file_name $file_path > /dev/null
-            chmod +x $file_path > /dev/null            
+            chmod $mod $file_path > /dev/null            
         fi
     done
     git_version=`grep "version" $TMP/md5.txt | awk -F: '{print $2}'`
@@ -374,7 +389,7 @@ ins_bxcup(){
         esac
     fi
     [ ! -d /etc/cron.daily ] && mkdir -p /etc/cron.daily && echo -e "`date '+%M %H'`\t* * *\troot\tcd / && run-parts --report /etc/cron.daily" >>/etc/crontab
-    wget -O /etc/cron.daily/bxc-update https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/aarch32/res/bxc-update 
+    down "aarch32/res/bxc-update" "/etc/cron.daily/bxc-update"  
     chmod +x /etc/cron.daily/bxc-update
     log "[info]"" install bxc_update over"
 }
