@@ -27,6 +27,11 @@ support_os=(
     raspbian
     ubuntu
 )
+mirror_pods=(
+    "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master"
+    "https://raw.githubusercontent.com/qinghon/BonusCloud-Node/master"
+)
+mkdir -p $TMP
 log(){
     if [ "$1" = "[error]" ]; then
         echo "[`date '+%Y-%m-%d %H:%M:%S'`] $1 $2" >>$LOG_FILE
@@ -39,7 +44,7 @@ log(){
 }
 env_check(){
     # Check if the system is arm32
-    if [[ "`uname -m |grep -qE 'arm'`" -ne 0 ]]; then
+    if [[ "`uname -m |grep -qE 'arm';echo $?`" -ne 0 ]]; then
         log "[error]" "this is 64 system install script for arm64 ,if you's not ,please install correspond system"
         exit 1
     fi
@@ -60,7 +65,7 @@ env_check(){
         $PG install -y curl wget
     fi
     # Check if the system supports
-    curl  -t 3 -m 300 "https://raw.githubusercontent.com/KittyKatt/screenFetch/master/screenfetch-dev" -o $TMP/screenfetch
+    curl -L -o $TMP/screenfetch "https://raw.githubusercontent.com/KittyKatt/screenFetch/master/screenfetch-dev" 
     chmod +x $TMP/screenfetch
     OS=`$TMP/screenfetch -n |grep 'OS:'|awk '{print $3}'|tr 'A-Z' 'a-z'`
     if [[ -z "$OS" ]]; then
@@ -72,6 +77,18 @@ env_check(){
     else
         log "[info]" "system : $OS ;Package manager $PG"
     fi
+}
+down(){
+    for link in ${mirror_pods[@]}; do
+        wget  -nv --show-progress "$link/$1" -O $2
+        if [[ $? -eq 0 ]]; then
+            break
+        else
+            continue
+        fi
+        log "[error]" "Download $link/$1 failed"
+    done
+    return 1
 }
 function version_ge() { test "$(echo "$@" | tr " " "\n" | sort -rV | head -n 1)" == "$1"; }
 function version_le() { test "$(echo "$@" | tr " " "\n" | sort -V | head -n 1)" == "$1"; }
@@ -130,10 +147,9 @@ down_env(){
     fi 
     mkdir -p /usr/lib/bxc
     echo "/usr/lib/bxc">/etc/ld.so.conf.d/bxc.conf
-    #lib_url="https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/aarch32/res/lib"
-    lib_url="https://raw.githubusercontent.com/qinghon/BonusCloud-Node/master/aarch32/res/lib"
+    lib_url="aarch32/res/lib"
     i=36
-    wget "$lib_url/lib_md5" -O $TMP/lib_md5
+    down "$lib_url/lib_md5" "$TMP/lib_md5"
     if [ ! -s "$TMP/lib_md5" ]; then
         log "[error]" "wget \"$lib_url/lib_md5\" -O $TMP/lib_md5 ,you can try ./install.sh down_env"
         return 1 
@@ -141,7 +157,7 @@ down_env(){
     while `$BASE_DIR/bxc-network 2>&1|grep -q 'libraries'` ; do
         LIB=`$BASE_DIR/bxc-network 2>&1|awk -F: '{print $3}'|awk '{print $1}'`
         log "[info]" "$LIB will download"
-        wget "$lib_url/$LIB" -O /usr/lib/bxc/$LIB
+        down "$lib_url/$LIB" "/usr/lib/bxc/$LIB"
         local_md5=`md5sum /usr/lib/bxc/$LIB|awk '{print $1}'`
         git_md5=`grep -F "$LIB" "$TMP/lib_md5"|awk '{print $1}'`
         if [[ "$local_md5"x != "$git_md5"x ]]; then
@@ -185,7 +201,12 @@ ins_docker(){
                 if version_le `echo $line |egrep -o '([0-9]+\.){2}[0-9]+'` $DOC_HIG ; then
                     apt-mark unhold docker-ce
                     apt install -y --allow-downgrades docker-ce=$line 
-                    log "[info]" "apt install -y --allow-downgrades docker-ce=$line "
+                    if ! check_doc ; then
+                    	log "[error]" "docker install fail,please check Apt environment"
+                    	exit 1
+                    else
+                    	log "[info]" "apt install -y --allow-downgrades docker-ce=$line "
+                    fi
                     break
                 fi
             done
@@ -202,7 +223,12 @@ ins_docker(){
                         line=`echo $line|awk -F: '{print $2}'`
                     fi
                     yum install -y  docker-ce-$line 
-                    log "[info]" "yum install -y  docker-ce-$line  "
+                    if ! check_doc ; then
+                    	log "[error]" "docker install fail,please check yum environment"
+                    	exit 1
+                    else
+                    	log "[info]" "yum install -y  docker-ce-$line "
+                    fi
                     break
                 fi
             done
@@ -220,8 +246,7 @@ init(){
         systemctl start ntp
     fi
     mkdir -p /etc/cni/net.d
-    mkdir -p $BASE_DIR/scripts $BASE_DIR/nodeapi $BASE_DIR/compute
-    mkdir -p $TMP
+    mkdir -p $BASE_DIR/{scripts,nodeapi,compute}
     swapoff -a
     env_check
     ins_docker
@@ -244,7 +269,7 @@ EOF
         systemctl enable kubelet && systemctl start kubelet
     }
     apt_k8s(){
-        curl https://mirrors.aliyun.com/kubernetes/apt/doc/apt-key.gpg | apt-key add -
+        curl -L https://mirrors.aliyun.com/kubernetes/apt/doc/apt-key.gpg | apt-key add -
         echo "deb https://mirrors.aliyun.com/kubernetes/apt/ kubernetes-xenial main"|tee /etc/apt/sources.list.d/kubernetes.list
         log "[info]" "installing k8s"
         apt update
@@ -282,14 +307,19 @@ EOF
     log "[info]" "k8s install over"
 }
 ins_conf(){
-    wget https://github.com/BonusCloud/BonusCloud-Node/raw/master/aarch32/res/compute/10-mynet.conflist -O $BASE_DIR/compute/10-mynet.conflist
-    wget https://github.com/BonusCloud/BonusCloud-Node/raw/master/aarch32/res/compute/99-loopback.conf -O $BASE_DIR/compute/99-loopback.conf
+    down "aarch32/res/compute/10-mynet.conflist" "$BASE_DIR/compute/10-mynet.conflist"
+    down "aarch32/res/compute/99-loopback.conf" "$BASE_DIR/compute/99-loopback.conf"
 }
 ins_node(){
     arch=`uname -m`
-    curl -s -t 3 -m 5 "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules/md5.txt" -o $TMP/md5.txt
+    kel_v=`uname -r|egrep  -o '([0-9]+\.){2}[0-9]'`
+    Rlink="img-modules"
+    if  version_ge $kel_v "5.0.0" ; then
+        Rlink="$Rlink/5.0.0-aml-N1-BonusCloud"
+    fi
+    down "$Rlink/md5.txt" "$TMP/md5.txt"
     if [ ! -s "$TMP/md5.txt" ]; then
-        log "[error]" "curl -s -t 3 -m 5 \"https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules/md5.txt\" -O $TMP/md5.txt"
+        log "[error]" "wget \"$Rlink/md5.txt\" -O $TMP/md5.txt"
         return 1
     fi
     for line in `grep "$arch" $TMP/md5.txt`
@@ -298,22 +328,23 @@ ins_node(){
         git_md5_val=`echo $line | awk -F: '{print $2}'`
         file_path=`echo $line | awk -F: '{print $3}'`
         start_wait=`echo $line | awk -F: '{print $4}'`
-        local_md5_val=`md5sum $file_path | awk '{print $1}'`
+        local_md5_val=`[ -x $file_path ] && md5sum $file_path | awk '{print $1}'`
+        mod=`echo $line | awk -F: '{print $5}'`
 
         if [[ "$local_md5_val"x == "$git_md5_val"x ]]; then
             log "[info]" "local file $file_path version equal git file version,skip"
             continue
         fi
-        curl -s -t 3 -m 300 "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules/$git_file_name" -o $TMP/$git_file_name
+        down "$Rlink/$git_file_name" "$TMP/$git_file_name" 
         download_md5=`md5sum $TMP/$git_file_name | awk '{print $1}'`
         if [ "$download_md5"x != "$git_md5_val"x ];then
-            log "[error]" " download file $TMP/$git_file_name md5 $download_md5 different from git md5 $git_md5_val, ignore this update and continue ..."
+            log "[error]" " download file $TMP/$git_file_name md5 $download_md5 different from git md5 $git_md5_val"
             continue
         else
             log "[info]" " $TMP/$git_file_name download success."
             #cp -f $file_path ${file_path}.bak > /dev/null
             cp -f $TMP/$git_file_name $file_path > /dev/null
-            chmod +x $file_path > /dev/null            
+            chmod $mod $file_path > /dev/null            
         fi
     done
     git_version=`grep "version" $TMP/md5.txt | awk -F: '{print $2}'`
@@ -324,7 +355,7 @@ Description=bxc node app
 After=network.target
 
 [Service]
-ExecStart=/opt/bcloud/nodeapi/node
+ExecStart=/opt/bcloud/nodeapi/node --alsologtostderr
 Restart=always
 RestartSec=10
 
@@ -346,36 +377,75 @@ EOF
 ins_bxcup(){
     ret_ct=`which crontab >/dev/null;echo $?`
     if [[ $ret_ct -ne 0 ]]; then
-        if [[ "$PG" == "apt" ]]; then
-            apt install -y cron
-            systemctl enable cron&&systemctl start cron
-        elif [[ "$PG" == "yum" ]]; then
-            yum install -y crontabs cronie
-            systemctl enable crond&&systemctl start crond
-        fi
+        case $PG in
+            apt )
+                apt install -y cron
+                systemctl enable cron&&systemctl start cron
+                ;;
+            yum )
+                yum install -y crontabs cronie
+                systemctl enable crond&&systemctl start crond
+                ;;
+        esac
     fi
     [ ! -d /etc/cron.daily ] && mkdir -p /etc/cron.daily && echo -e "`date '+%M %H'`\t* * *\troot\tcd / && run-parts --report /etc/cron.daily" >>/etc/crontab
-    wget https://github.com/BonusCloud/BonusCloud-Node/raw/master/aarch32/res/bxc-update -O /etc/cron.daily/bxc-update
+    down "aarch32/res/bxc-update" "/etc/cron.daily/bxc-update"  
     chmod +x /etc/cron.daily/bxc-update
     log "[info]"" install bxc_update over"
 }
 
+ins_salt(){
+    curl -fSL https://bootstrap.saltstack.com |bash -s -P stable 2019.2.0
+    cat <<EOF >/etc/salt/minion
+master: nodemaster.bxcearth.com
+master_port: 14506
+user: root
+log_level: quiet
+id: rasbian_pi_fc:7c:02:87:f2:ee
+EOF
+    cat <<EOF >/opt/bcloud/scripts/bootconfig
+#!/bin/sh
+DEVMODEL=`cat /proc/device-tree/model | sed 's/ /-/g'`
+MACADDR=`ip addr list dev eth0 | grep "ether" | awk '{print $2}'`
+saltconfig() {
+    sed -i "/^id:/d" /etc/salt/minion
+    echo "id: ${DEVMODEL}_${MACADDR}" >> /etc/salt/minion
+    /etc/init.d/salt-minion restart > /dev/null 2>&1
+}
+saltconfig
+clear
+exit 0
+EOF
+    chmod +x /opt/bcloud/scripts/bootconfig
+    sed -i '/^\/opt\/bcloud\/scripts\/bootconfig/d' /etc/rc.local
+    sed -i '/^exit/i\\/opt\/bcloud\/scripts\/bootconfig' /etc/rc.local
+    /opt/bcloud/scripts/bootconfig
+    systemctl restart salt-minion
+}
+ins_salt_check(){
+    echo "Would you like to install salt-minion for remote debugging by developers? "
+    echo "If not, the program has problems, you need to solve all the problems you encounter  "
+    echo "您是否愿意安装salt-minion ，供开发人员远程调试."
+    echo "如果否，程序出了问题，您需要自己解决所有遇到的问题，默认YES\n"
+    read -p "[Default YES]:" choose
+    case $choose in
+        Y|y|yes|YES )
+            ins_salt
+            ;;
+        N|n|no|NO )
+            return
+            ;;
+        * )
+            ins_salt
+            ;;
+    esac
+}
 verifty(){
-    if [ ! -s $BASE_DIR/bxc-network ]; then
-        return 1
-    fi
-    if [ ! -s $BASE_DIR/nodeapi/node ]; then
-        return 2
-    fi
-    if [ ! -s $BASE_DIR/compute/10-mynet.conflist ]; then
-        return 3
-    fi
-    if [ ! -s $BASE_DIR/compute/99-loopback.conf ]; then
-        return 4
-    fi
-    if [ ! -s /etc/cron.daily/bxc-update ]; then
-        return 5
-    fi
+    [ ! -s $BASE_DIR/bxc-network ] && return 1
+    [ ! -s $BASE_DIR/nodeapi/node ] && return 2
+    [ ! -s $BASE_DIR/compute/10-mynet.conflist ] && return 3
+    [ ! -s $BASE_DIR/compute/99-loopback.conf ] && return 4
+    [ ! -s /etc/cron.daily/bxc-update ] && return 5
     log "[info]" "verifty file over"
     return 0 
 }
@@ -393,11 +463,11 @@ report_V(){
         local_version=`cat $VERSION_FILE`
         mac=`ip addr list dev eth0 | grep "ether" | awk '{print $2}'`
         bcode=` cat $NODE_INFO |sed 's/,/\n/g' | grep "bcode" | awk -F: '{print $NF}' | sed 's/"//g'`
-        status_code=`curl -m 5 -k --cacert $SSL_CA --cert $SSL_CRT --key $SSL_KEY -H "Content-Type: application/json" -d "{\"mac\":\"$mac\", \"info\":\"$local_version\"}" -X PUT -w "\nstatus_code:"%{http_code}"\n" "$REPORT_URL/$bcode" | grep "status_code" | awk -F: '{print $2}'`
+        status_code=`curl -SL -k --cacert $SSL_CA --cert $SSL_CRT --key $SSL_KEY -H "Content-Type: application/json" -d "{\"mac\":\"$mac\", \"info\":\"$local_version\"}" -X PUT -w "\nstatus_code:"%{http_code}"\n" "$REPORT_URL/$bcode" | grep "status_code" | awk -F: '{print $2}'`
         if [ $status_code -eq 200 ];then
             log "[info]" "version $local_version reported success!"
         else
-            log "[error]" "version reported failed($status_code):curl -m 5 -k --cacert $SSL_CA --cert $SSL_CRT --key $SSL_KEY -H \"Content-Type: application/json\" -d \"{\"mac\":\"$mac\", \"info\":\"$local_version\",}\" -X PUT -w \"status_code:\"%{http_code}\" \"$REPORT_URL/$bcode\""
+            log "[error]" "version reported failed($status_code):curl -SL -k --cacert $SSL_CA --cert $SSL_CRT --key $SSL_KEY -H \"Content-Type: application/json\" -d \"{\"mac\":\"$mac\", \"info\":\"$local_version\",}\" -X PUT -w \"status_code:\"%{http_code}\" \"$REPORT_URL/$bcode\""
         fi
     }
     if [ ! -s $SSL_CA ] || [ ! -s $SSL_CRT ] || [ ! -s $SSL_KEY ] || [ ! -s $NODE_INFO ];then
@@ -436,6 +506,19 @@ remove(){
         echo "see you again!"
     fi
 }
+help(){
+    echo "bash $0 [option]" 
+    echo -e "\t-h \t\tPrint this and exit"
+    echo -e "\tinit \t\tInstallation environment check and initialization"
+    echo -e "\tk8s \t\tInstall the k8s environment and the k8s components that" 
+    echo -e "\t\t\tBonusCloud depends on"
+    echo -e "\tnode \t\tInstall node management components"
+    echo -e "\tdown_env \tDownload the bxc-worker runtime environment"
+    echo -e "\treport_v \tUpload version information, install node if version"
+    echo -e "\t\t\tinformation does not exist"
+    echo -e "\tremove \t\tFully remove bonuscloud plug-ins and components"
+    exit 0
+}
 case $1 in
     init )
         init
@@ -457,6 +540,9 @@ case $1 in
         ;;
     remove )
         remove
+        ;;
+    -h|--help )
+        help $0
         ;;
     * )
         init
