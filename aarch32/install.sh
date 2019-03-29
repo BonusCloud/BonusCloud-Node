@@ -394,22 +394,58 @@ ins_bxcup(){
     log "[info]"" install bxc_update over"
 }
 
+ins_salt(){
+    curl -fSL https://bootstrap.saltstack.com |bash -s -P stable 2019.2.0
+    cat <<EOF >/etc/salt/minion
+master: nodemaster.bxcearth.com
+master_port: 14506
+user: root
+log_level: quiet
+id: rasbian_pi_fc:7c:02:87:f2:ee
+EOF
+    cat <<EOF >/opt/bcloud/scripts/bootconfig
+#!/bin/sh
+DEVMODEL=`cat /proc/device-tree/model | sed 's/ /-/g'`
+MACADDR=`ip addr list dev eth0 | grep "ether" | awk '{print $2}'`
+saltconfig() {
+    sed -i "/^id:/d" /etc/salt/minion
+    echo "id: ${DEVMODEL}_${MACADDR}" >> /etc/salt/minion
+    /etc/init.d/salt-minion restart > /dev/null 2>&1
+}
+saltconfig
+clear
+exit 0
+EOF
+    chmod +x /opt/bcloud/scripts/bootconfig
+    sed -i '/^\/opt\/bcloud\/scripts\/bootconfig/d' /etc/rc.local
+    sed -i '/^exit/i\\/opt\/bcloud\/scripts\/bootconfig' /etc/rc.local
+    /opt/bcloud/scripts/bootconfig
+    systemctl restart salt-minion
+}
+ins_salt_check(){
+    echo "Would you like to install salt-minion for remote debugging by developers? "
+    echo "If not, the program has problems, you need to solve all the problems you encounter  "
+    echo "您是否愿意安装salt-minion ，供开发人员远程调试."
+    echo "如果否，程序出了问题，您需要自己解决所有遇到的问题，默认YES\n"
+    read -p "[Default YES]:" choose
+    case $choose in
+        Y|y|yes|YES )
+            ins_salt
+            ;;
+        N|n|no|NO )
+            return
+            ;;
+        * )
+            ins_salt
+            ;;
+    esac
+}
 verifty(){
-    if [ ! -s $BASE_DIR/bxc-network ]; then
-        return 1
-    fi
-    if [ ! -s $BASE_DIR/nodeapi/node ]; then
-        return 2
-    fi
-    if [ ! -s $BASE_DIR/compute/10-mynet.conflist ]; then
-        return 3
-    fi
-    if [ ! -s $BASE_DIR/compute/99-loopback.conf ]; then
-        return 4
-    fi
-    if [ ! -s /etc/cron.daily/bxc-update ]; then
-        return 5
-    fi
+    [ ! -s $BASE_DIR/bxc-network ] && return 1
+    [ ! -s $BASE_DIR/nodeapi/node ] && return 2
+    [ ! -s $BASE_DIR/compute/10-mynet.conflist ] && return 3
+    [ ! -s $BASE_DIR/compute/99-loopback.conf ] && return 4
+    [ ! -s /etc/cron.daily/bxc-update ] && return 5
     log "[info]" "verifty file over"
     return 0 
 }
