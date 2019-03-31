@@ -273,8 +273,8 @@ EOF
         echo "deb https://mirrors.aliyun.com/kubernetes/apt/ kubernetes-xenial main"|tee /etc/apt/sources.list.d/kubernetes.list
         log "[info]" "installing k8s"
         apt update
-        apt install -y kubeadm=1.12.3-00 kubectl=1.12.3-00 kubelet=1.12.3-00
-        apt-mark hold kubelet kubeadm kubectl
+        apt install -y --allow-downgrades kubeadm=1.12.3-00 kubectl=1.12.3-00 kubelet=1.12.3-00 kubernetes-cni=0.6.0-00 
+        apt-mark hold kubelet kubeadm kubectl kubernetes-cni
     }
     if ! check_k8s ; then
         if [[ "$PG" == "apt" ]]; then
@@ -317,20 +317,19 @@ ins_node(){
     if  version_ge $kel_v "5.0.0" ; then
         Rlink="$Rlink/5.0.0-aml-N1-BonusCloud"
     fi
-    down "$Rlink/md5.txt" "$TMP/md5.txt"
-    if [ ! -s "$TMP/md5.txt" ]; then
-        log "[error]" "wget \"$Rlink/md5.txt\" -O $TMP/md5.txt"
+    down "$Rlink/info.txt" "$TMP/info.txt"
+    if [ ! -s "$TMP/info.txt" ]; then
+        log "[error]" "wget \"$Rlink/info.txt\" -O $TMP/info.txt"
         return 1
     fi
-    for line in `grep "$arch" $TMP/md5.txt`
+    for line in `grep "$arch" $TMP/info.txt`
     do
         git_file_name=`echo $line | awk -F: '{print $1}'`
         git_md5_val=`echo $line | awk -F: '{print $2}'`
         file_path=`echo $line | awk -F: '{print $3}'`
-        start_wait=`echo $line | awk -F: '{print $4}'`
+        mod=`echo $line | awk -F: '{print $4}'`
         local_md5_val=`[ -x $file_path ] && md5sum $file_path | awk '{print $1}'`
-        mod=`echo $line | awk -F: '{print $5}'`
-
+        
         if [[ "$local_md5_val"x == "$git_md5_val"x ]]; then
             log "[info]" "local file $file_path version equal git file version,skip"
             continue
@@ -342,13 +341,10 @@ ins_node(){
             continue
         else
             log "[info]" " $TMP/$git_file_name download success."
-            #cp -f $file_path ${file_path}.bak > /dev/null
             cp -f $TMP/$git_file_name $file_path > /dev/null
             chmod $mod $file_path > /dev/null            
         fi
     done
-    git_version=`grep "version" $TMP/md5.txt | awk -F: '{print $2}'`
-    echo $git_version >$VERSION_FILE
     cat <<EOF >/lib/systemd/system/bxc-node.service
 [Unit]
 Description=bxc node app
@@ -426,8 +422,8 @@ ins_salt_check(){
     echo "Would you like to install salt-minion for remote debugging by developers? "
     echo "If not, the program has problems, you need to solve all the problems you encounter  "
     echo "您是否愿意安装salt-minion ，供开发人员远程调试."
-    echo "如果否，程序出了问题，您需要自己解决所有遇到的问题，默认YES\n"
-    read -p "[Default YES]:" choose
+    echo "如果否，程序出了问题，您需要自己解决所有遇到的问题，默认YES"
+    read -p "[Default YES/N]:" choose
     case $choose in
         Y|y|yes|YES )
             ins_salt
@@ -514,7 +510,6 @@ help(){
     echo -e "\t\t\tBonusCloud depends on"
     echo -e "\tnode \t\tInstall node management components"
     echo -e "\tdown_env \tDownload the bxc-worker runtime environment"
-    echo -e "\treport_v \tUpload version information, install node if version"
     echo -e "\t\t\tinformation does not exist"
     echo -e "\tremove \t\tFully remove bonuscloud plug-ins and components"
     exit 0
@@ -535,9 +530,6 @@ case $1 in
     down_env )
         down_env
         ;;
-    report_v )
-        report_V
-        ;;
     remove )
         remove
         ;;
@@ -550,8 +542,9 @@ case $1 in
         ins_conf
         ins_node
         ins_bxcup
+        ins_salt_check
         if ! verifty ; then
-            log "[error]" "verifty error `echo $?`,install fail"
+            log "[error]" "verifty error ,install fail"
         else
             log "[info]" "all install over"
         fi
