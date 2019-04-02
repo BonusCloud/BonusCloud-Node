@@ -358,6 +358,7 @@ RestartSec=10
 [Install]
 WantedBy=multi-user.target
 EOF
+    systemctl daemon-reload
     systemctl enable bxc-node
     systemctl start bxc-node
     down_env
@@ -368,26 +369,6 @@ EOF
     else
         log "[info]" " node start success."
     fi
-}
-
-ins_bxcup(){
-    ret_ct=`which crontab >/dev/null;echo $?`
-    if [[ $ret_ct -ne 0 ]]; then
-        case $PG in
-            apt )
-                apt install -y cron
-                systemctl enable cron&&systemctl start cron
-                ;;
-            yum )
-                yum install -y crontabs cronie
-                systemctl enable crond&&systemctl start crond
-                ;;
-        esac
-    fi
-    [ ! -d /etc/cron.daily ] && mkdir -p /etc/cron.daily && echo -e "`date '+%M %H'`\t* * *\troot\tcd / && run-parts --report /etc/cron.daily" >>/etc/crontab
-    down "aarch32/res/bxc-update" "/etc/cron.daily/bxc-update"  
-    chmod +x /etc/cron.daily/bxc-update
-    log "[info]"" install bxc_update over"
 }
 
 ins_salt(){
@@ -449,46 +430,6 @@ verifty(){
     log "[info]" "verifty file over"
     return 0 
 }
-check_v(){
-    res=`grep -q 'v' $VERSION_FILE; echo $?`
-    if [ $res -ne 0 ]; then
-        log "[error]" "$VERSION_FILE not find version,try reinstall "
-    else
-        log "[info]" "$VERSION_FILE found"
-    fi
-    return "$res"
-}
-report_V(){
-    report(){
-        local_version=`cat $VERSION_FILE`
-        mac=`ip addr list dev eth0 | grep "ether" | awk '{print $2}'`
-        bcode=` cat $NODE_INFO |sed 's/,/\n/g' | grep "bcode" | awk -F: '{print $NF}' | sed 's/"//g'`
-        status_code=`curl -SL -k --cacert $SSL_CA --cert $SSL_CRT --key $SSL_KEY -H "Content-Type: application/json" -d "{\"mac\":\"$mac\", \"info\":\"$local_version\"}" -X PUT -w "\nstatus_code:"%{http_code}"\n" "$REPORT_URL/$bcode" | grep "status_code" | awk -F: '{print $2}'`
-        if [ $status_code -eq 200 ];then
-            log "[info]" "version $local_version reported success!"
-        else
-            log "[error]" "version reported failed($status_code):curl -SL -k --cacert $SSL_CA --cert $SSL_CRT --key $SSL_KEY -H \"Content-Type: application/json\" -d \"{\"mac\":\"$mac\", \"info\":\"$local_version\",}\" -X PUT -w \"status_code:\"%{http_code}\" \"$REPORT_URL/$bcode\""
-        fi
-    }
-    if [ ! -s $SSL_CA ] || [ ! -s $SSL_CRT ] || [ ! -s $SSL_KEY ] || [ ! -s $NODE_INFO ];then
-        log "[error]" "ssl file or node.db file not found, ignore to report verison."
-        exit 1
-    fi
-    check_v
-    if  [ $? -ne 0 ] ; then
-        ins_node
-        check_v
-        if [ $? -ne 0 ] ; then
-            log "[error]" "install node failed"
-            exit 1
-        else 
-            log "[info]" "update node success,try report version"
-            report
-        fi
-    else
-        report
-    fi
-}
 remove(){
     read -p "Are you sure all remove BonusCloud plugin? yes/n:" CHOSE
     if [ -z $CHOSE ]; then
@@ -527,9 +468,6 @@ case $1 in
         ;;
     node )
         ins_node
-        ;;
-    bxcup )
-        ins_bxcup
         ;;
     down_env )
         down_env
