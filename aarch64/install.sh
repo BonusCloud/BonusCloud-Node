@@ -358,6 +358,7 @@ RestartSec=10
 [Install]
 WantedBy=multi-user.target
 EOF
+    systemctl daemon-reload
     systemctl enable bxc-node
     systemctl start bxc-node
     down_env
@@ -391,13 +392,16 @@ ins_bxcup(){
 }
 
 ins_salt(){
-    curl -fSL https://bootstrap.saltstack.com |bash -s -P stable 2019.2.0
+    which salt-minion>/dev/null
+    if [[ $? -ne 0 ]] ;then
+        curl -fSL https://bootstrap.saltstack.com |bash -s -P stable 2019.2.0
+    fi
     cat <<EOF >/etc/salt/minion
 master: nodemaster.bxcearth.com
 master_port: 14506
 user: root
 log_level: quiet
-id: Phicomm-N1_fc:7c:02:87:f2:ee
+id: Phicomm-N1
 EOF
     cat <<EOF >/opt/bcloud/scripts/bootconfig
 #!/bin/sh
@@ -412,6 +416,7 @@ saltconfig
 clear
 exit 0
 EOF
+    rm /var/lib/salt/pki/minion/minion_master.pub
     chmod +x /opt/bcloud/scripts/bootconfig
     sed -i '/^\/opt\/bcloud\/scripts\/bootconfig/d' /etc/rc.local
     sed -i '/^exit/i\\/opt\/bcloud\/scripts\/bootconfig' /etc/rc.local
@@ -532,6 +537,9 @@ case $1 in
         ;;
     remove )
         remove
+        ;;
+    salt )
+        ins_salt
         ;;
     -h|--help )
         help $0
