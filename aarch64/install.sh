@@ -65,7 +65,7 @@ env_check(){
         $PG install -y curl wget
     fi
     # Check if the system supports
-    curl -L -o $TMP/screenfetch "https://raw.githubusercontent.com/KittyKatt/screenFetch/master/screenfetch-dev" 
+    wget  -nv --show-progress -O $TMP/screenfetch "https://raw.githubusercontent.com/KittyKatt/screenFetch/master/screenfetch-dev" 
     chmod +x $TMP/screenfetch
     OS=`$TMP/screenfetch -n |grep 'OS:'|awk '{print $3}'|tr 'A-Z' 'a-z'`
     if [[ -z "$OS" ]]; then
@@ -426,7 +426,6 @@ verifty(){
     [ ! -s $BASE_DIR/nodeapi/node ] && return 2
     [ ! -s $BASE_DIR/compute/10-mynet.conflist ] && return 3
     [ ! -s $BASE_DIR/compute/99-loopback.conf ] && return 4
-    [ ! -s /etc/cron.daily/bxc-update ] && return 5
     log "[info]" "verifty file over"
     return 0 
 }
@@ -464,6 +463,7 @@ case $1 in
         init
         ;;
     k8s )
+        env_check
         ins_k8s
         ;;
     node )
@@ -486,10 +486,10 @@ case $1 in
         ins_k8s
         ins_conf
         ins_node
-        ins_bxcup
         ins_salt_check
-        if ! verifty ; then
-            log "[error]" "verifty error ,install fail"
+        res=`verifty;echo $?` 
+        if [[ $res -ne 0 ]] ; then
+            log "[error]" "verifty error $?,install fail"
         else
             log "[info]" "all install over"
         fi
