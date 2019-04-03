@@ -489,7 +489,7 @@ case $1 in
         ins_salt_check
         res=`verifty;echo $?` 
         if [[ $res -ne 0 ]] ; then
-            log "[error]" "verifty error $?,install fail"
+            log "[error]" "verifty error $res,install fail"
         else
             log "[info]" "all install over"
         fi
