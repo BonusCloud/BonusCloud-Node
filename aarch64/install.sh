@@ -295,8 +295,6 @@ EOF
     docker tag registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/pause:arm-3.1 k8s.gcr.io/pause:3.1
     docker tag registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/kube-proxy-arm:v1.12.3 k8s.gcr.io/kube-proxy:v1.12.3
     
-    docker pull  registry.cn-beijing.aliyuncs.com/bxc_public/bxc-worker:v2-arm64
-    docker tag registry.cn-beijing.aliyuncs.com/bxc_public/bxc-worker:v2-arm64 bxc-worker:v2
     cat <<EOF >  /etc/sysctl.d/k8s.conf
 vm.swappiness = 0
 net.ipv6.conf.default.forwarding = 1
