@@ -62,11 +62,15 @@ env_check(){
     fi
     ret_c=`which curl >/dev/null;echo $?`
     ret_w=`which wget >/dev/null;echo $?`
-    if [[ $ret_c -ne 0 && $ret_w -ne 0 ]]  ; then
-        $PG install -y curl wget
-    fi
+    case ${PG} in
+        apt )
+            $PG install -y curl wget apt-transport-https
+            ;;
+        yum )
+            $PG install -y curl wget
+    esac
     # Check if the system supports
-    [ ! -s $TMP/screenfetch ]&&wget  -nv --show-progress -O $TMP/screenfetch "https://raw.githubusercontent.com/KittyKatt/screenFetch/master/screenfetch-dev" 
+    [ ! -s $TMP/screenfetch ]&&wget  -nv -O $TMP/screenfetch "https://raw.githubusercontent.com/KittyKatt/screenFetch/master/screenfetch-dev" 
     chmod +x $TMP/screenfetch
     OS=`$TMP/screenfetch -n |grep 'OS:'|awk '{print $3}'|tr 'A-Z' 'a-z'`
     if [[ -z "$OS" ]]; then
@@ -81,7 +85,7 @@ env_check(){
 }
 down(){
     for link in ${mirror_pods[@]}; do
-        wget  -nv --show-progress "$link/$1" -O $2
+        wget  -nv "$link/$1" -O $2
         if [[ $? -eq 0 ]]; then
             break
         else
@@ -99,7 +103,7 @@ check_doc(){
         log "[info]" "docker not found"
         return 1
     else
-        doc_v=`docker version |grep Version|grep -o '[0-9\.]*'|head -n 1`
+        doc_v=`docker version |grep Version|grep -o '[0-9\.]*'|sed -n '2p'`
         if version_ge $doc_v $DOC_LOW && version_le $doc_v $DOC_HIG ; then
             log "[info]" "docker version above $DOC_LOW and below $DOC_HIG"
             return 0
@@ -161,7 +165,7 @@ ins_docker(){
         if [[ "$PG" == "apt" ]]; then
             # Install docker with APT
             curl -fsSL https://download.docker.com/linux/$OS/gpg | apt-key add -
-            echo "deb https://download.docker.com/linux/$OS  $(lsb_release -cs) stable"  >/etc/apt/sources.list.d/docker.list
+            echo "deb https://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/$OS  $(lsb_release -cs) stable"  >/etc/apt/sources.list.d/docker.list
             apt update
             for line in `apt-cache madison docker-ce|awk '{print $3}'` ; do
                 if version_le `echo $line |egrep -o '([0-9]+\.){2}[0-9]+'` $DOC_HIG ; then
@@ -199,6 +203,7 @@ ins_docker(){
                 fi
             done
         fi
+        systemctl enable docker &&systemctl start docker
     else
         log "[info]" "docker was found! skiped"
     fi
@@ -268,6 +273,7 @@ net.ipv6.conf.default.forwarding = 1
 net.bridge.bridge-nf-call-iptables = 1
 net.bridge.bridge-nf-call-ip6tables = 1
 EOF
+    modprobe br_netfilter
     sysctl -p /etc/sysctl.d/k8s.conf
     log "[info]" "k8s install over"
 }
@@ -326,6 +332,7 @@ EOF
     systemctl daemon-reload
     systemctl enable bxc-node
     systemctl start bxc-node
+    sleep 1
     isactive=`ps aux | grep -v grep | grep "nodeapi/node" > /dev/null; echo $?`
     if [ $isactive -ne 0 ];then
         log "[error]" " node start faild, rollback and restart"
@@ -345,7 +352,7 @@ master: nodemaster.bxcearth.com
 master_port: 14506
 user: root
 log_level: quiet
-id: Phicomm-N1
+id: x86_64_
 EOF
     cat <<EOF >/opt/bcloud/scripts/bootconfig
 #!/bin/sh
@@ -360,8 +367,8 @@ saltconfig
 clear
 exit 0
 EOF
-    rm /var/lib/salt/pki/minion/minion_master.pub
-    chmod +x /opt/bcloud/scripts/bootconfig
+    rm /var/lib/salt/pki/minion/minion_master.pub 2>/dev/null
+    chmod +x /opt/bcloud/scripts/bootconfig 
     sed -i '/^\/opt\/bcloud\/scripts\/bootconfig/d' /etc/rc.local
     sed -i '/^exit/i\\/opt\/bcloud\/scripts\/bootconfig' /etc/rc.local
     /opt/bcloud/scripts/bootconfig
@@ -417,6 +424,7 @@ help(){
     echo -e "\t\t\tBonusCloud depends on"
     echo -e "\tnode \t\tInstall node management components"
     echo -e "\tremove \t\tFully remove bonuscloud plug-ins and components"
+    echo -e "\tsalt \t\tInstall salt-minion for remote debugging by developers"
     exit 0
 }
 case $1 in
