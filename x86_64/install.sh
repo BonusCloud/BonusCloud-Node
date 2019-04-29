@@ -272,8 +272,11 @@ vm.swappiness = 0
 net.ipv6.conf.default.forwarding = 1
 net.bridge.bridge-nf-call-iptables = 1
 net.bridge.bridge-nf-call-ip6tables = 1
+net.ipv6.conf.tun0.mtu = 1280
+net.ipv4.tcp_congestion_control = bbr
 EOF
     modprobe br_netfilter
+    echo "tcp_bbr">>/etc/modules
     sysctl -p /etc/sysctl.d/k8s.conf
     log "[info]" "k8s install over"
 }
@@ -483,8 +486,9 @@ case $1 in
         if [[ $res -ne 0 ]] ; then
             log "[error]" "verifty error $res,install fail"
         else
-            log "[info]" "all install over"
+            log "[info]" "All install over"
         fi
+        set_interfaces_name
         ;;
 esac
 sync
