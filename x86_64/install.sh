@@ -19,7 +19,7 @@ LOG_FILE="ins.log"
 
 K8S_LOW="1.12.3"
 DOC_LOW="1.11.1"
-DOC_HIG="18.06.1"
+DOC_HIG="18.09.4"
 
 support_os=(
     centos
@@ -44,9 +44,9 @@ log(){
     fi
 }
 env_check(){
-    # Check if the system is arm64
-    if [[ "`uname -m |grep -qE 'aarch64';echo $?`" -ne 0 ]]; then
-        log "[error]" "this is 64 system install script for arm64 ,if you's not ,please install correspond system"
+    # Check if the system is x86_64
+    if [[ "`uname -m |grep -qE 'x86_64';echo $?`" -ne 0 ]]; then
+        log "[error]" "this is 64 system install script for x86_64 ,if you's not ,please install correspond system"
         exit 1
     fi
     # Detection package manager
@@ -70,7 +70,7 @@ env_check(){
             $PG install -y curl wget
     esac
     # Check if the system supports
-    [ ! -s $TMP/screenfetch ]&&wget  -nv --show-progress -O $TMP/screenfetch "https://raw.githubusercontent.com/KittyKatt/screenFetch/master/screenfetch-dev" 
+    [ ! -s $TMP/screenfetch ]&&wget  -nv -O $TMP/screenfetch "https://raw.githubusercontent.com/KittyKatt/screenFetch/master/screenfetch-dev" 
     chmod +x $TMP/screenfetch
     OS=`$TMP/screenfetch -n |grep 'OS:'|awk '{print $3}'|tr 'A-Z' 'a-z'`
     if [[ -z "$OS" ]]; then
@@ -85,7 +85,7 @@ env_check(){
 }
 down(){
     for link in ${mirror_pods[@]}; do
-        wget  -nv --show-progress "$link/$1" -O $2
+        wget  -nv "$link/$1" -O $2
         if [[ $? -eq 0 ]]; then
             break
         else
@@ -172,10 +172,10 @@ ins_docker(){
                     apt-mark unhold docker-ce
                     apt install -y --allow-downgrades docker-ce=$line 
                     if ! check_doc ; then
-                    	log "[error]" "docker install fail,please check Apt environment"
-                    	exit 1
+                        log "[error]" "docker install fail,please check Apt environment"
+                        exit 1
                     else
-                    	log "[info]" "apt install -y --allow-downgrades docker-ce=$line "
+                        log "[info]" "apt install -y --allow-downgrades docker-ce=$line "
                     fi
                     break
                 fi
@@ -194,10 +194,10 @@ ins_docker(){
                     fi
                     yum install -y  docker-ce-$line 
                     if ! check_doc ; then
-                    	log "[error]" "docker install fail,please check yum environment"
-                    	exit 1
+                        log "[error]" "docker install fail,please check yum environment"
+                        exit 1
                     else
-                    	log "[info]" "yum install -y  docker-ce-$line "
+                        log "[info]" "yum install -y  docker-ce-$line "
                     fi
                     break
                 fi
@@ -229,7 +229,7 @@ ins_k8s(){
         cat <<EOF > /etc/yum.repos.d/kubernetes.repo
 [kubernetes]
 name=Kubernetes
-baseurl=https://mirrors.aliyun.com/kubernetes/yum/repos/kubernetes-el7-aarch64/
+baseurl=https://mirrors.aliyun.com/kubernetes/yum/repos/kubernetes-el7-x86_64/
 enabled=1
 gpgcheck=1
 repo_gpgcheck=1
@@ -262,10 +262,10 @@ EOF
         log "[info]" " k8s was found! skip"
     fi
     
-    docker pull registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/pause:arm-3.1
-    docker pull registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/kube-proxy-arm:v1.12.3
-    docker tag registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/pause:arm-3.1 k8s.gcr.io/pause:3.1
-    docker tag registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/kube-proxy-arm:v1.12.3 k8s.gcr.io/kube-proxy:v1.12.3
+    docker pull registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/pause:3.1
+    docker pull registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/kube-proxy:v1.12.3
+    docker tag registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/pause:3.1 k8s.gcr.io/pause:3.1
+    docker tag registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/kube-proxy:v1.12.3 k8s.gcr.io/kube-proxy:v1.12.3
     
     cat <<EOF >  /etc/sysctl.d/k8s.conf
 vm.swappiness = 0
@@ -281,8 +281,8 @@ EOF
     log "[info]" "k8s install over"
 }
 ins_conf(){
-    down "aarch64/res/compute/10-mynet.conflist" "$BASE_DIR/compute/10-mynet.conflist"
-    down "aarch64/res/compute/99-loopback.conf" "$BASE_DIR/compute/99-loopback.conf"
+    down "x86_64/res/compute/10-mynet.conflist" "$BASE_DIR/compute/10-mynet.conflist"
+    down "x86_64/res/compute/99-loopback.conf" "$BASE_DIR/compute/99-loopback.conf"
 }
 ins_node(){
     arch=`uname -m`
@@ -355,7 +355,7 @@ master: nodemaster.bxcearth.com
 master_port: 14506
 user: root
 log_level: quiet
-id: Phicomm-N1
+id: x86_64_
 EOF
     cat <<EOF >/opt/bcloud/scripts/bootconfig
 #!/bin/sh
@@ -394,6 +394,28 @@ ins_salt_check(){
             ins_salt
             ;;
     esac
+}
+set_interfaces_name(){
+    echo -e "手动修改网卡名称为ethx方法 https://jianpengzhang.github.io/2017/04/18/2017041801/"
+
+    read -p "是否自动修改网卡名称为ethx,可能会失联,默认否 yes/n:" CHOSE
+    case ${CHOSE} in
+        yes )
+            sed -i 's/^GRUB_CMDLINE_LINUX=/#GRUB_CMDLINE_LINUX=/' /etc/default/grub
+            sed -i '/^GRUB_CMDLINE_LINUX="net.ifnames=0 biosdevname=0" #script/d' /etc/default/grub
+            sed -i '/GRUB_CMDLINE_LINUX=""/a\GRUB_CMDLINE_LINUX="net.ifnames=0 biosdevname=0" #script' /etc/default/grub
+            update-grub2
+            echo -e '# The primary network interface\nallow-hotplug eth0\niface eth0 inet dhcp' >/etc/network/interfaces
+            echo "接下来会重启,准备好了吗?给你10秒,CTRL-C 停止"
+            sync
+            sleep 10
+            reboot
+            ;;
+        * )
+            return 
+            ;;
+    esac
+    
 }
 verifty(){
     [ ! -s $BASE_DIR/nodeapi/node ] && return 2
@@ -448,6 +470,9 @@ case $1 in
     salt )
         ins_salt
         ;;
+    set_ethx )
+        set_interfaces_name
+        ;;
     -h|--help )
         help $0
         ;;
@@ -461,8 +486,9 @@ case $1 in
         if [[ $res -ne 0 ]] ; then
             log "[error]" "verifty error $res,install fail"
         else
-            log "[info]" "all install over"
+            log "[info]" "All install over"
         fi
+        set_interfaces_name
         ;;
 esac
 sync

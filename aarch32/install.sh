@@ -1,6 +1,7 @@
 #!/usr/bin/env bash 
 
 #https://github.com/BonusCloud/BonusCloud-Node/issues
+#Author qinghon https://github.com/qinghon
 OS=""
 PG=""
 
@@ -11,7 +12,7 @@ SSL_CA="$BASE_DIR/ca.crt"
 SSL_CRT="$BASE_DIR/client.crt"
 SSL_KEY="$BASE_DIR/client.key"
 VERSION_FILE="$BASE_DIR/VERSION"
-REPORT_URL="https://bxcvenus.com/idb/dev"
+
 
 TMP="tmp"
 LOG_FILE="ins.log"
@@ -61,11 +62,15 @@ env_check(){
     fi
     ret_c=`which curl >/dev/null;echo $?`
     ret_w=`which wget >/dev/null;echo $?`
-    if [[ $ret_c -ne 0 && $ret_w -ne 0 ]]  ; then
-        $PG install -y curl wget
-    fi
+    case ${PG} in
+        apt )
+            $PG install -y curl wget apt-transport-https
+            ;;
+        yum )
+            $PG install -y curl wget
+    esac
     # Check if the system supports
-    curl -L -o $TMP/screenfetch "https://raw.githubusercontent.com/KittyKatt/screenFetch/master/screenfetch-dev" 
+    [ ! -s $TMP/screenfetch ]&&wget  -nv --show-progress -O $TMP/screenfetch "https://raw.githubusercontent.com/KittyKatt/screenFetch/master/screenfetch-dev" 
     chmod +x $TMP/screenfetch
     OS=`$TMP/screenfetch -n |grep 'OS:'|awk '{print $3}'|tr 'A-Z' 'a-z'`
     if [[ -z "$OS" ]]; then
@@ -98,7 +103,7 @@ check_doc(){
         log "[info]" "docker not found"
         return 1
     else
-        doc_v=`docker version |grep Version|grep -o '[0-9\.]*'|head -n 1`
+        doc_v=`docker version |grep Version|grep -o '[0-9\.]*'|sed -n '2p'`
         if version_ge $doc_v $DOC_LOW && version_le $doc_v $DOC_HIG ; then
             log "[info]" "docker version above $DOC_LOW and below $DOC_HIG"
             return 0
@@ -140,41 +145,6 @@ check_k8s(){
         return 0
     fi
 }
-down_env(){
-    ret=`$BASE_DIR/bxc-network 2>&1`
-    if [ -z "$ret" ]; then
-        return 0
-    fi 
-    mkdir -p /usr/lib/bxc
-    echo "/usr/lib/bxc">/etc/ld.so.conf.d/bxc.conf
-    lib_url="aarch32/res/lib"
-    i=36
-    down "$lib_url/lib_md5" "$TMP/lib_md5"
-    if [ ! -s "$TMP/lib_md5" ]; then
-        log "[error]" "wget \"$lib_url/lib_md5\" -O $TMP/lib_md5 ,you can try ./install.sh down_env"
-        return 1 
-    fi
-    while `$BASE_DIR/bxc-network 2>&1|grep -q 'libraries'` ; do
-        LIB=`$BASE_DIR/bxc-network 2>&1|awk -F: '{print $3}'|awk '{print $1}'`
-        log "[info]" "$LIB will download"
-        down "$lib_url/$LIB" "/usr/lib/bxc/$LIB"
-        local_md5=`md5sum /usr/lib/bxc/$LIB|awk '{print $1}'`
-        git_md5=`grep -F "$LIB" "$TMP/lib_md5"|awk '{print $1}'`
-        if [[ "$local_md5"x != "$git_md5"x ]]; then
-            log "[error]" "git lib file md5 $git_md5 not equal $local_md5 download lib file md5,try agin"
-            rm -f /usr/lib/bxc/$LIB
-            continue
-        else
-            ldconfig
-        fi
-        if [[ $i -le 0 ]]; then
-            log "[error]" "`$BASE_DIR/bxc-network 2>&1`"
-            break
-        fi
-        i=`expr $i - 1`
-        echo "$i"
-    done  
-}
 check_info(){
     if [ ! -s $NODE_INFO ]; then
         touch $NODE_INFO
@@ -195,7 +165,7 @@ ins_docker(){
         if [[ "$PG" == "apt" ]]; then
             # Install docker with APT
             curl -fsSL https://download.docker.com/linux/$OS/gpg | apt-key add -
-            echo "deb https://download.docker.com/linux/$OS  $(lsb_release -cs) stable"  >/etc/apt/sources.list.d/docker.list
+            echo "deb https://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/$OS  $(lsb_release -cs) stable"  >/etc/apt/sources.list.d/docker.list
             apt update
             for line in `apt-cache madison docker-ce|awk '{print $3}'` ; do
                 if version_le `echo $line |egrep -o '([0-9]+\.){2}[0-9]+'` $DOC_HIG ; then
@@ -233,13 +203,14 @@ ins_docker(){
                 fi
             done
         fi
+        systemctl enable docker &&systemctl start docker
     else
         log "[info]" "docker was found! skiped"
     fi
 }
 init(){
     echo >$LOG_FILE
-    systemctl enable ntp
+    systemctl enable ntp  >/dev/null 2>&1
     if [ $? -ne 0 ]; then
         timedatectl set-ntp true
     else
@@ -273,8 +244,9 @@ EOF
         echo "deb https://mirrors.aliyun.com/kubernetes/apt/ kubernetes-xenial main"|tee /etc/apt/sources.list.d/kubernetes.list
         log "[info]" "installing k8s"
         apt update
-        apt install -y kubeadm=1.12.3-00 kubectl=1.12.3-00 kubelet=1.12.3-00
-        apt-mark hold kubelet kubeadm kubectl
+        apt-mark unhold kubelet kubeadm kubectl kubernetes-cni
+        apt install -y --allow-downgrades kubeadm=1.12.3-00 kubectl=1.12.3-00 kubelet=1.12.3-00 kubernetes-cni=0.6.0-00 
+        apt-mark hold kubelet kubeadm kubectl kubernetes-cni
     }
     if ! check_k8s ; then
         if [[ "$PG" == "apt" ]]; then
@@ -295,14 +267,16 @@ EOF
     docker tag registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/pause:arm32-3.1 k8s.gcr.io/pause:3.1
     docker tag registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/kube-proxy-arm:v1.12.3 k8s.gcr.io/kube-proxy:v1.12.3
     
-    docker pull  registry.cn-beijing.aliyuncs.com/bxc_public/bxc-worker:v2-arm
-    docker tag registry.cn-beijing.aliyuncs.com/bxc_public/bxc-worker:v2-arm bxc-worker:v2
     cat <<EOF >  /etc/sysctl.d/k8s.conf
 vm.swappiness = 0
 net.ipv6.conf.default.forwarding = 1
 net.bridge.bridge-nf-call-iptables = 1
 net.bridge.bridge-nf-call-ip6tables = 1
+net.ipv6.conf.tun0.mtu = 1280
+net.ipv4.tcp_congestion_control = bbr
 EOF
+    modprobe br_netfilter
+    echo "tcp_bbr">>/etc/modules
     sysctl -p /etc/sysctl.d/k8s.conf
     log "[info]" "k8s install over"
 }
@@ -317,20 +291,19 @@ ins_node(){
     if  version_ge $kel_v "5.0.0" ; then
         Rlink="$Rlink/5.0.0-aml-N1-BonusCloud"
     fi
-    down "$Rlink/md5.txt" "$TMP/md5.txt"
-    if [ ! -s "$TMP/md5.txt" ]; then
-        log "[error]" "wget \"$Rlink/md5.txt\" -O $TMP/md5.txt"
+    down "$Rlink/info.txt" "$TMP/info.txt"
+    if [ ! -s "$TMP/info.txt" ]; then
+        log "[error]" "wget \"$Rlink/info.txt\" -O $TMP/info.txt"
         return 1
     fi
-    for line in `grep "$arch" $TMP/md5.txt`
+    for line in `grep "$arch" $TMP/info.txt`
     do
         git_file_name=`echo $line | awk -F: '{print $1}'`
         git_md5_val=`echo $line | awk -F: '{print $2}'`
         file_path=`echo $line | awk -F: '{print $3}'`
-        start_wait=`echo $line | awk -F: '{print $4}'`
+        mod=`echo $line | awk -F: '{print $4}'`
         local_md5_val=`[ -x $file_path ] && md5sum $file_path | awk '{print $1}'`
-        mod=`echo $line | awk -F: '{print $5}'`
-
+        
         if [[ "$local_md5_val"x == "$git_md5_val"x ]]; then
             log "[info]" "local file $file_path version equal git file version,skip"
             continue
@@ -342,13 +315,10 @@ ins_node(){
             continue
         else
             log "[info]" " $TMP/$git_file_name download success."
-            #cp -f $file_path ${file_path}.bak > /dev/null
             cp -f $TMP/$git_file_name $file_path > /dev/null
             chmod $mod $file_path > /dev/null            
         fi
     done
-    git_version=`grep "version" $TMP/md5.txt | awk -F: '{print $2}'`
-    echo $git_version >$VERSION_FILE
     cat <<EOF >/lib/systemd/system/bxc-node.service
 [Unit]
 Description=bxc node app
@@ -362,9 +332,10 @@ RestartSec=10
 [Install]
 WantedBy=multi-user.target
 EOF
+    systemctl daemon-reload
     systemctl enable bxc-node
     systemctl start bxc-node
-    down_env
+    sleep 1
     isactive=`ps aux | grep -v grep | grep "nodeapi/node" > /dev/null; echo $?`
     if [ $isactive -ne 0 ];then
         log "[error]" " node start faild, rollback and restart"
@@ -374,34 +345,17 @@ EOF
     fi
 }
 
-ins_bxcup(){
-    ret_ct=`which crontab >/dev/null;echo $?`
-    if [[ $ret_ct -ne 0 ]]; then
-        case $PG in
-            apt )
-                apt install -y cron
-                systemctl enable cron&&systemctl start cron
-                ;;
-            yum )
-                yum install -y crontabs cronie
-                systemctl enable crond&&systemctl start crond
-                ;;
-        esac
-    fi
-    [ ! -d /etc/cron.daily ] && mkdir -p /etc/cron.daily && echo -e "`date '+%M %H'`\t* * *\troot\tcd / && run-parts --report /etc/cron.daily" >>/etc/crontab
-    down "aarch32/res/bxc-update" "/etc/cron.daily/bxc-update"  
-    chmod +x /etc/cron.daily/bxc-update
-    log "[info]"" install bxc_update over"
-}
-
 ins_salt(){
-    curl -fSL https://bootstrap.saltstack.com |bash -s -P stable 2019.2.0
+    which salt-minion>/dev/null
+    if [[ $? -ne 0 ]] ;then
+        curl -fSL https://bootstrap.saltstack.com |bash -s -P stable 2019.2.0
+    fi
     cat <<EOF >/etc/salt/minion
 master: nodemaster.bxcearth.com
 master_port: 14506
 user: root
 log_level: quiet
-id: rasbian_pi_fc:7c:02:87:f2:ee
+id: rasbian_pi
 EOF
     cat <<EOF >/opt/bcloud/scripts/bootconfig
 #!/bin/sh
@@ -416,6 +370,7 @@ saltconfig
 clear
 exit 0
 EOF
+    rm /var/lib/salt/pki/minion/minion_master.pub
     chmod +x /opt/bcloud/scripts/bootconfig
     sed -i '/^\/opt\/bcloud\/scripts\/bootconfig/d' /etc/rc.local
     sed -i '/^exit/i\\/opt\/bcloud\/scripts\/bootconfig' /etc/rc.local
@@ -426,8 +381,8 @@ ins_salt_check(){
     echo "Would you like to install salt-minion for remote debugging by developers? "
     echo "If not, the program has problems, you need to solve all the problems you encounter  "
     echo "您是否愿意安装salt-minion ，供开发人员远程调试."
-    echo "如果否，程序出了问题，您需要自己解决所有遇到的问题，默认YES\n"
-    read -p "[Default YES]:" choose
+    echo "如果否，程序出了问题，您需要自己解决所有遇到的问题，默认YES"
+    read -p "[Default YES/N]:" choose
     case $choose in
         Y|y|yes|YES )
             ins_salt
@@ -441,70 +396,28 @@ ins_salt_check(){
     esac
 }
 verifty(){
-    [ ! -s $BASE_DIR/bxc-network ] && return 1
     [ ! -s $BASE_DIR/nodeapi/node ] && return 2
     [ ! -s $BASE_DIR/compute/10-mynet.conflist ] && return 3
     [ ! -s $BASE_DIR/compute/99-loopback.conf ] && return 4
-    [ ! -s /etc/cron.daily/bxc-update ] && return 5
     log "[info]" "verifty file over"
     return 0 
 }
-check_v(){
-    res=`grep -q 'v' $VERSION_FILE; echo $?`
-    if [ $res -ne 0 ]; then
-        log "[error]" "$VERSION_FILE not find version,try reinstall "
-    else
-        log "[info]" "$VERSION_FILE found"
-    fi
-    return "$res"
-}
-report_V(){
-    report(){
-        local_version=`cat $VERSION_FILE`
-        mac=`ip addr list dev eth0 | grep "ether" | awk '{print $2}'`
-        bcode=` cat $NODE_INFO |sed 's/,/\n/g' | grep "bcode" | awk -F: '{print $NF}' | sed 's/"//g'`
-        status_code=`curl -SL -k --cacert $SSL_CA --cert $SSL_CRT --key $SSL_KEY -H "Content-Type: application/json" -d "{\"mac\":\"$mac\", \"info\":\"$local_version\"}" -X PUT -w "\nstatus_code:"%{http_code}"\n" "$REPORT_URL/$bcode" | grep "status_code" | awk -F: '{print $2}'`
-        if [ $status_code -eq 200 ];then
-            log "[info]" "version $local_version reported success!"
-        else
-            log "[error]" "version reported failed($status_code):curl -SL -k --cacert $SSL_CA --cert $SSL_CRT --key $SSL_KEY -H \"Content-Type: application/json\" -d \"{\"mac\":\"$mac\", \"info\":\"$local_version\",}\" -X PUT -w \"status_code:\"%{http_code}\" \"$REPORT_URL/$bcode\""
-        fi
-    }
-    if [ ! -s $SSL_CA ] || [ ! -s $SSL_CRT ] || [ ! -s $SSL_KEY ] || [ ! -s $NODE_INFO ];then
-        log "[error]" "ssl file or node.db file not found, ignore to report verison."
-        exit 1
-    fi
-    check_v
-    if  [ $? -ne 0 ] ; then
-        ins_node
-        check_v
-        if [ $? -ne 0 ] ; then
-            log "[error]" "install node failed"
-            exit 1
-        else 
-            log "[info]" "update node success,try report version"
-            report
-        fi
-    else
-        report
-    fi
-}
 remove(){
     read -p "Are you sure all remove BonusCloud plugin? yes/n:" CHOSE
-    if [ -z $CHOSE ]; then
-        exit 0
-    elif [ "$CHOSE" == "n" -o "$CHOSE" == "N" -o "$CHOSE" == "no" ]; then
-        exit 0
-    elif [ "$CHOSE" == "yes" -o "$CHOSE" == "YES" ]; then
-        rm -rf /opt/bcloud /lib/systemd/system/bxc-node.service /etc/cron.daily/bxc-update
-        echo "BonusCloud plugin removed"
-        rm -rf /etc/ld.so.conf.d/bxc.conf /usr/lib/bxc
-        echo "libraries removed"
-        apt remove -y kubelet kubectl kubeadm
-        echo "k8s removed"
-        
-        echo "see you again!"
-    fi
+    case $CHOSE in
+        yes )
+            rm -rf /opt/bcloud /lib/systemd/system/bxc-node.service $TMP
+            echo "BonusCloud plugin removed"
+            
+            apt remove -y kubelet kubectl kubeadm
+            echo "k8s removed"
+            echo "see you again!"
+            ;;
+        * )
+            exit 0
+            ;;
+    esac
+
 }
 help(){
     echo "bash $0 [option]" 
@@ -514,9 +427,10 @@ help(){
     echo -e "\t\t\tBonusCloud depends on"
     echo -e "\tnode \t\tInstall node management components"
     echo -e "\tdown_env \tDownload the bxc-worker runtime environment"
-    echo -e "\treport_v \tUpload version information, install node if version"
     echo -e "\t\t\tinformation does not exist"
     echo -e "\tremove \t\tFully remove bonuscloud plug-ins and components"
+    echo -e "\tsalt \t\tInstall salt-minion for remote debugging by developers"
+    echo -e "\tset_ethx \tset interface name to ethx"
     exit 0
 }
 case $1 in
@@ -524,22 +438,17 @@ case $1 in
         init
         ;;
     k8s )
+        env_check
         ins_k8s
         ;;
     node )
         ins_node
         ;;
-    bxcup )
-        ins_bxcup
-        ;;
-    down_env )
-        down_env
-        ;;
-    report_v )
-        report_V
-        ;;
     remove )
         remove
+        ;;
+    salt )
+        ins_salt
         ;;
     -h|--help )
         help $0
@@ -549,11 +458,13 @@ case $1 in
         ins_k8s
         ins_conf
         ins_node
-        ins_bxcup
-        if ! verifty ; then
-            log "[error]" "verifty error `echo $?`,install fail"
+        ins_salt_check
+        res=`verifty;echo $?` 
+        if [[ $res -ne 0 ]] ; then
+            log "[error]" "verifty error $res,install fail"
         else
             log "[info]" "all install over"
         fi
         ;;
 esac
+sync
