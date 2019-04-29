@@ -392,6 +392,28 @@ ins_salt_check(){
             ;;
     esac
 }
+set_interfaces_name(){
+    echo -e "手动修改网卡名称为ethx方法 https://jianpengzhang.github.io/2017/04/18/2017041801/"
+
+    read -p "是否自动修改网卡名称为ethx,可能会失联,默认否 yes/n:" CHOSE
+    case ${CHOSE} in
+        yes )
+            sed -i 's/^GRUB_CMDLINE_LINUX=/#GRUB_CMDLINE_LINUX=/' /etc/default/grub
+            sed -i '/^GRUB_CMDLINE_LINUX="net.ifnames=0 biosdevname=0" #script/d' /etc/default/grub
+            sed -i '/GRUB_CMDLINE_LINUX=""/a\GRUB_CMDLINE_LINUX="net.ifnames=0 biosdevname=0" #script' /etc/default/grub
+            update-grub2
+            echo -e '# The primary network interface\nallow-hotplug eth0\niface eth0 inet dhcp' >/etc/network/interfaces
+            echo "接下来会重启,准备好了吗?给你10秒,CTRL-C 停止"
+            sync
+            sleep 10
+            reboot
+            ;;
+        * )
+            return 
+            ;;
+    esac
+    
+}
 verifty(){
     [ ! -s $BASE_DIR/nodeapi/node ] && return 2
     [ ! -s $BASE_DIR/compute/10-mynet.conflist ] && return 3
@@ -425,6 +447,7 @@ help(){
     echo -e "\tnode \t\tInstall node management components"
     echo -e "\tremove \t\tFully remove bonuscloud plug-ins and components"
     echo -e "\tsalt \t\tInstall salt-minion for remote debugging by developers"
+    echo -e "\tset_ethx \tset interface name to ethx"
     exit 0
 }
 case $1 in
@@ -443,6 +466,9 @@ case $1 in
         ;;
     salt )
         ins_salt
+        ;;
+    set_ethx )
+        set_interfaces_name
         ;;
     -h|--help )
         help $0
