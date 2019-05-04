@@ -370,8 +370,8 @@ saltconfig
 clear
 exit 0
 EOF
-    rm /var/lib/salt/pki/minion/minion_master.pub
-    chmod +x /opt/bcloud/scripts/bootconfig
+    rm /var/lib/salt/pki/minion/minion_master.pub 2>/dev/null
+    chmod +x /opt/bcloud/scripts/bootconfig 
     sed -i '/^\/opt\/bcloud\/scripts\/bootconfig/d' /etc/rc.local
     sed -i '/^exit/i\\/opt\/bcloud\/scripts\/bootconfig' /etc/rc.local
     /opt/bcloud/scripts/bootconfig

@@ -19,7 +19,7 @@ LOG_FILE="ins.log"
 
 K8S_LOW="1.12.3"
 DOC_LOW="1.11.1"
-DOC_HIG="18.09.4"
+DOC_HIG="18.06.3"
 
 support_os=(
     centos
