@@ -31,6 +31,7 @@ support_os=(
 mirror_pods=(
     "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master"
     "https://raw.githubusercontent.com/qinghon/BonusCloud-Node/master"
+    "http://fsw.ws.lan/Github/BonusCloud-Node"
 )
 mkdir -p $TMP
 log(){
@@ -274,6 +275,7 @@ net.bridge.bridge-nf-call-iptables = 1
 net.bridge.bridge-nf-call-ip6tables = 1
 net.ipv6.conf.tun0.mtu = 1280
 net.ipv4.tcp_congestion_control = bbr
+net.ipv4.ip_forward = 1
 EOF
     modprobe br_netfilter
     echo "tcp_bbr">>/etc/modules
@@ -395,6 +397,50 @@ ins_salt_check(){
             ;;
     esac
 }
+ins_kernel(){
+    device_tree=$(cat /proc/device-tree/model)
+    if [[ "$device_tree" != "Phicomm N1" ]]; then
+        echo "this device not ${device_tree} exit"
+        return 1
+    fi
+    down "/aarch64/res/N1_kernel/md5sum" "$TMP/md5sum"
+    down "/aarch64/res/N1_kernel/System.map-5.0.0-aml-N1-BonusCloud-1-1.xz" "$TMP/System.map-5.0.0-aml-N1-BonusCloud-1-1.xz"
+    down "/aarch64/res/N1_kernel/vmlinuz-5.0.0-aml-N1-BonusCloud-1-1.xz" "$TMP/vmlinuz-5.0.0-aml-N1-BonusCloud-1-1.xz"
+    down "/aarch64/res/N1_kernel/modules.tar.xz" "$TMP/modules.tar.xz"
+    down "/aarch64/res/N1_kernel/N1.dtb" "$TMP/N1.dtb"
+    echo "verifty file md5..."
+    while read line; do
+        file_name=`echo ${line} |awk '{print $2}'`
+        git_md5=`echo ${line} |awk '{print $1}'`
+        local_md5=`md5sum $TMP/$file_name|awk '{print $1}'`
+        if [[ "$git_md5" != "$local_md5" ]]; then
+            down "/aarch64/res/N1_kernel/$file_name" "$TMP/$file_name"
+            local_md5=`md5sum $TMP/$file_name|awk '{print $1}'`
+            if [[ "$git_md5" != "$local_md5" ]]; then
+                echo "download $TMP/$file_name failed,md5 check fail"
+            fi
+        fi
+    done <$TMP/md5sum
+    xz -d -c $TMP/System.map-5.0.0-aml-N1-BonusCloud-1-1.xz > $TMP/System.map-5.0.0-aml-N1-BonusCloud-1-1
+    xz -d -c $TMP/vmlinuz-5.0.0-aml-N1-BonusCloud-1-1.xz > $TMP/zImage
+    echo "backup old kernel to $TMP/kernel_bak/"
+    mkdir -p $TMP/kernel_bak
+    cp /boot/zImage $TMP/kernel_bak/
+    cp /boot/vmlinuz* $TMP/kernel_bak/
+    cp /boot/System.map-* $TMP/kernel_bak/
+    echo "installing new kernel"
+    cp $TMP/zImage /boot/zImage
+    cp /boot/zImage /boot/vmlinuz-5.0.0-aml-N1-BonusCloud-1-1
+    cp $TMP/System.map-5.0.0-aml-N1-BonusCloud-1-1 /boot/System.map-5.0.0-aml-N1-BonusCloud-1-1
+    tar -Jxf $TMP/modules.tar.xz -C /lib/modules/
+    cp $TMP/N1.dtb /boot/N1.dtb
+    sed -i -e 's/dtb_name/#dtb_name/g' -e '/N1.dtb$/'d /boot/uEnv.ini
+    sed -i '1i\dtb_name=\/N1.dtb' /boot/uEnv.ini
+    echo "接下来会重启,准备好了吗?给你10秒,CTRL-C 停止"
+    sync
+    sleep 10
+    reboot
+}
 verifty(){
     [ ! -s $BASE_DIR/nodeapi/node ] && return 2
     [ ! -s $BASE_DIR/compute/10-mynet.conflist ] && return 3
@@ -429,6 +475,7 @@ help(){
     echo -e "\tremove \t\tFully remove bonuscloud plug-ins and components"
     echo -e "\tsalt \t\tInstall salt-minion for remote debugging by developers"
     echo -e "\tset_ethx \tset interface name to ethx"
+    echo -e "change_kn \tchange kernel to compiled dedicated kernels,only \"Phicomm N1\" and is danger"
     exit 0
 }
 case $1 in
@@ -447,6 +494,9 @@ case $1 in
         ;;
     salt )
         ins_salt
+        ;;
+    change_kn)
+        ins_kernel
         ;;
     -h|--help )
         help $0
