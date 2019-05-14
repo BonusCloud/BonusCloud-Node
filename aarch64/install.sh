@@ -397,6 +397,15 @@ ins_salt_check(){
             ;;
     esac
 }
+change_net(){
+    if [[ "$PG" == "apt" ]]; then
+        apt -y purge network-manager
+    fi
+    rm /etc/dhcp/dhclient-enter-hooks.d/resolvconf
+    echo -e '#!/bin/sh \nifconfig eth0 mtu 1400 '>/etc/network/if-pre-up.d/mtu
+    chmod +x /etc/network/if-pre-up.d/mtu
+    apt install -y netplug
+}
 ins_kernel(){
     device_tree=$(cat /proc/device-tree/model)
     if [[ "$device_tree" != "Phicomm N1" ]]; then
@@ -433,9 +442,12 @@ ins_kernel(){
     cp /boot/zImage /boot/vmlinuz-5.0.0-aml-N1-BonusCloud-1-1
     cp $TMP/System.map-5.0.0-aml-N1-BonusCloud-1-1 /boot/System.map-5.0.0-aml-N1-BonusCloud-1-1
     tar -Jxf $TMP/modules.tar.xz -C /lib/modules/
-    cp $TMP/N1.dtb /boot/N1.dtb
-    sed -i -e 's/dtb_name/#dtb_name/g' -e '/N1.dtb$/'d /boot/uEnv.ini
-    sed -i '1i\dtb_name=\/N1.dtb' /boot/uEnv.ini
+    res=`grep -q 'N1.dtb' /boot/uEnv.ini;echo $?`
+    if [[ ${res} -ne 0 ]]; then
+        cp $TMP/N1.dtb /boot/N1.dtb
+        sed -i -e 's/dtb_name/#dtb_name/g' -e '/N1.dtb$/'d /boot/uEnv.ini
+        sed -i '1i\dtb_name=\/N1.dtb' /boot/uEnv.ini
+    fi
     echo "接下来会重启,准备好了吗?给你10秒,CTRL-C 停止"
     sync
     sleep 10
