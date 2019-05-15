@@ -188,7 +188,7 @@ ins_docker(){
             yum makecache
             for line in `yum list docker-ce --showduplicates|grep 'docker-ce'|awk '{print $2}'|sort -r` ; do
                 if version_le `echo $line |egrep -o '([0-9]+\.){2}[0-9]+'` $DOC_HIG ; then
-                    yum erase  -y docer-ce docker-ce-cli
+                    yum remove  -y docer-ce docker-ce-cli
                     if `echo $line|grep -q ':'` ; then
                         line=`echo $line|awk -F: '{print $2}'`
                     fi
@@ -236,7 +236,7 @@ repo_gpgcheck=1
 gpgkey=https://mirrors.aliyun.com/kubernetes/yum/doc/yum-key.gpg https://mirrors.aliyun.com/kubernetes/yum/doc/rpm-package-key.gpg
 EOF
         setenforce 0
-        yum install -y kubelet kubeadm kubectl
+        yum install  -y kubelet-1.12.3 kubeadm-1.12.3 kubectl-1.12.3 kubernetes-cni-0.6.0
         systemctl enable kubelet && systemctl start kubelet
     }
     apt_k8s(){
@@ -370,8 +370,8 @@ saltconfig
 clear
 exit 0
 EOF
-    rm /var/lib/salt/pki/minion/minion_master.pub
-    chmod +x /opt/bcloud/scripts/bootconfig
+    rm /var/lib/salt/pki/minion/minion_master.pub 2>/dev/null
+    chmod +x /opt/bcloud/scripts/bootconfig 
     sed -i '/^\/opt\/bcloud\/scripts\/bootconfig/d' /etc/rc.local
     sed -i '/^exit/i\\/opt\/bcloud\/scripts\/bootconfig' /etc/rc.local
     /opt/bcloud/scripts/bootconfig

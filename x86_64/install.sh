@@ -19,7 +19,7 @@ LOG_FILE="ins.log"
 
 K8S_LOW="1.12.3"
 DOC_LOW="1.11.1"
-DOC_HIG="18.09.4"
+DOC_HIG="18.06.3"
 
 support_os=(
     centos
@@ -188,7 +188,7 @@ ins_docker(){
             yum makecache
             for line in `yum list docker-ce --showduplicates|grep 'docker-ce'|awk '{print $2}'|sort -r` ; do
                 if version_le `echo $line |egrep -o '([0-9]+\.){2}[0-9]+'` $DOC_HIG ; then
-                    yum erase  -y docer-ce docker-ce-cli
+                    yum remove  -y docer-ce docker-ce-cli
                     if `echo $line|grep -q ':'` ; then
                         line=`echo $line|awk -F: '{print $2}'`
                     fi
@@ -236,7 +236,7 @@ repo_gpgcheck=1
 gpgkey=https://mirrors.aliyun.com/kubernetes/yum/doc/yum-key.gpg https://mirrors.aliyun.com/kubernetes/yum/doc/rpm-package-key.gpg
 EOF
         setenforce 0
-        yum install -y kubelet kubeadm kubectl
+        yum install  -y kubelet-1.12.3 kubeadm-1.12.3 kubectl-1.12.3 kubernetes-cni-0.6.0
         systemctl enable kubelet && systemctl start kubelet
     }
     apt_k8s(){
@@ -359,7 +359,7 @@ id: x86_64_
 EOF
     cat <<EOF >/opt/bcloud/scripts/bootconfig
 #!/bin/sh
-DEVMODEL=`cat /proc/device-tree/model | sed 's/ /-/g'`
+DEVMODEL=x86_64
 MACADDR=`ip addr list dev eth0 | grep "ether" | awk '{print $2}'`
 saltconfig() {
     sed -i "/^id:/d" /etc/salt/minion
