@@ -12,7 +12,9 @@ SSL_CA="$BASE_DIR/ca.crt"
 SSL_CRT="$BASE_DIR/client.crt"
 SSL_KEY="$BASE_DIR/client.key"
 VERSION_FILE="$BASE_DIR/VERSION"
-
+DEVMODEL=$(tr -d '\0' </proc/device-tree/model)
+DEFAULT_LINK=$(ip route list|grep 'default'|awk '{print $5}')
+MACADDR=$(ip link show ${Default_link}|grep 'ether'|awk '{print $2}')
 
 TMP="tmp"
 LOG_FILE="ins.log"
@@ -31,7 +33,6 @@ support_os=(
 mirror_pods=(
     "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master"
     "https://raw.githubusercontent.com/qinghon/BonusCloud-Node/master"
-    "http://fsw.ws.lan/Github/BonusCloud-Node"
 )
 mkdir -p $TMP
 log(){
@@ -279,7 +280,7 @@ net.ipv4.ip_forward = 1
 EOF
     modprobe br_netfilter
     echo "tcp_bbr">>/etc/modules
-    sysctl -p /etc/sysctl.d/k8s.conf
+    sysctl -p /etc/sysctl.d/k8s.conf 2>/dev/null
     log "[info]" "k8s install over"
 }
 ins_conf(){
@@ -327,7 +328,7 @@ Description=bxc node app
 After=network.target
 
 [Service]
-ExecStart=/opt/bcloud/nodeapi/node --alsologtostderr
+ExecStart=/opt/bcloud/nodeapi/node --alsologtostderr # --intf ${DEFAULT_LINK}
 Restart=always
 RestartSec=10
 
@@ -352,31 +353,17 @@ ins_salt(){
     if [[ $? -ne 0 ]] ;then
         curl -fSL https://bootstrap.saltstack.com |bash -s -P stable 2019.2.0
     fi
+    if [[ '${DEVMODEL}' == '' ]]; then
+        DEVMODEL="Unknow"
+    fi
     cat <<EOF >/etc/salt/minion
 master: nodemaster.bxcearth.com
 master_port: 14506
 user: root
 log_level: quiet
-id: Phicomm-N1
-EOF
-    cat <<EOF >/opt/bcloud/scripts/bootconfig
-#!/bin/sh
-DEVMODEL=`cat /proc/device-tree/model | sed 's/ /-/g'`
-MACADDR=`ip addr list dev eth0 | grep "ether" | awk '{print $2}'`
-saltconfig() {
-    sed -i "/^id:/d" /etc/salt/minion
-    echo "id: ${DEVMODEL}_${MACADDR}" >> /etc/salt/minion
-    /etc/init.d/salt-minion restart > /dev/null 2>&1
-}
-saltconfig
-clear
-exit 0
+id: ${DEVMODEL}_${MACADDR}
 EOF
     rm /var/lib/salt/pki/minion/minion_master.pub 2>/dev/null
-    chmod +x /opt/bcloud/scripts/bootconfig 
-    sed -i '/^\/opt\/bcloud\/scripts\/bootconfig/d' /etc/rc.local
-    sed -i '/^exit/i\\/opt\/bcloud\/scripts\/bootconfig' /etc/rc.local
-    /opt/bcloud/scripts/bootconfig
     systemctl restart salt-minion
 }
 ins_salt_check(){
@@ -386,9 +373,6 @@ ins_salt_check(){
     echo "如果否，程序出了问题，您需要自己解决所有遇到的问题，默认YES"
     read -p "[Default YES/N]:" choose
     case $choose in
-        Y|y|yes|YES )
-            ins_salt
-            ;;
         N|n|no|NO )
             return
             ;;
@@ -407,8 +391,7 @@ change_net(){
     apt install -y netplug
 }
 ins_kernel(){
-    device_tree=$(cat /proc/device-tree/model)
-    if [[ "$device_tree" != "Phicomm N1" ]]; then
+    if [[ "${DEVMODEL}" != "Phicomm N1" ]]; then
         echo "this device not ${device_tree} exit"
         return 1
     fi
