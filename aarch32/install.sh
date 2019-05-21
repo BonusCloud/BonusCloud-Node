@@ -1,6 +1,7 @@
 #!/usr/bin/env bash 
 
 #https://github.com/BonusCloud/BonusCloud-Node/issues
+#Author qinghon https://github.com/qinghon
 OS=""
 PG=""
 
@@ -11,7 +12,9 @@ SSL_CA="$BASE_DIR/ca.crt"
 SSL_CRT="$BASE_DIR/client.crt"
 SSL_KEY="$BASE_DIR/client.key"
 VERSION_FILE="$BASE_DIR/VERSION"
-REPORT_URL="https://bxcvenus.com/idb/dev"
+DEVMODEL=$(tr -d '\0' </proc/device-tree/model)
+DEFAULT_LINK=$(ip route list|grep 'default'|awk '{print $5}')
+MACADDR=$(ip link show ${Default_link}|grep 'ether'|awk '{print $2}')
 
 TMP="tmp"
 LOG_FILE="ins.log"
@@ -61,9 +64,13 @@ env_check(){
     fi
     ret_c=`which curl >/dev/null;echo $?`
     ret_w=`which wget >/dev/null;echo $?`
-    if [[ $ret_c -ne 0 && $ret_w -ne 0 ]]  ; then
-        $PG install -y curl wget
-    fi
+    case ${PG} in
+        apt )
+            $PG install -y curl wget apt-transport-https
+            ;;
+        yum )
+            $PG install -y curl wget
+    esac
     # Check if the system supports
     [ ! -s $TMP/screenfetch ]&&wget  -nv --show-progress -O $TMP/screenfetch "https://raw.githubusercontent.com/KittyKatt/screenFetch/master/screenfetch-dev" 
     chmod +x $TMP/screenfetch
@@ -98,7 +105,7 @@ check_doc(){
         log "[info]" "docker not found"
         return 1
     else
-        doc_v=`docker version |grep Version|grep -o '[0-9\.]*'|head -n 1`
+        doc_v=`docker version |grep Version|grep -o '[0-9\.]*'|sed -n '2p'`
         if version_ge $doc_v $DOC_LOW && version_le $doc_v $DOC_HIG ; then
             log "[info]" "docker version above $DOC_LOW and below $DOC_HIG"
             return 0
@@ -140,41 +147,6 @@ check_k8s(){
         return 0
     fi
 }
-down_env(){
-    ret=`$BASE_DIR/bxc-network 2>&1`
-    if [ -z "$ret" ]; then
-        return 0
-    fi 
-    mkdir -p /usr/lib/bxc
-    echo "/usr/lib/bxc">/etc/ld.so.conf.d/bxc.conf
-    lib_url="aarch32/res/lib"
-    i=36
-    down "$lib_url/lib_md5" "$TMP/lib_md5"
-    if [ ! -s "$TMP/lib_md5" ]; then
-        log "[error]" "wget \"$lib_url/lib_md5\" -O $TMP/lib_md5 ,you can try ./install.sh down_env"
-        return 1 
-    fi
-    while `$BASE_DIR/bxc-network 2>&1|grep -q 'libraries'` ; do
-        LIB=`$BASE_DIR/bxc-network 2>&1|awk -F: '{print $3}'|awk '{print $1}'`
-        log "[info]" "$LIB will download"
-        down "$lib_url/$LIB" "/usr/lib/bxc/$LIB"
-        local_md5=`md5sum /usr/lib/bxc/$LIB|awk '{print $1}'`
-        git_md5=`grep -F "$LIB" "$TMP/lib_md5"|awk '{print $1}'`
-        if [[ "$local_md5"x != "$git_md5"x ]]; then
-            log "[error]" "git lib file md5 $git_md5 not equal $local_md5 download lib file md5,try agin"
-            rm -f /usr/lib/bxc/$LIB
-            continue
-        else
-            ldconfig
-        fi
-        if [[ $i -le 0 ]]; then
-            log "[error]" "`$BASE_DIR/bxc-network 2>&1`"
-            break
-        fi
-        i=`expr $i - 1`
-        echo "$i"
-    done  
-}
 check_info(){
     if [ ! -s $NODE_INFO ]; then
         touch $NODE_INFO
@@ -195,7 +167,7 @@ ins_docker(){
         if [[ "$PG" == "apt" ]]; then
             # Install docker with APT
             curl -fsSL https://download.docker.com/linux/$OS/gpg | apt-key add -
-            echo "deb https://download.docker.com/linux/$OS  $(lsb_release -cs) stable"  >/etc/apt/sources.list.d/docker.list
+            echo "deb https://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/$OS  $(lsb_release -cs) stable"  >/etc/apt/sources.list.d/docker.list
             apt update
             for line in `apt-cache madison docker-ce|awk '{print $3}'` ; do
                 if version_le `echo $line |egrep -o '([0-9]+\.){2}[0-9]+'` $DOC_HIG ; then
@@ -218,7 +190,7 @@ ins_docker(){
             yum makecache
             for line in `yum list docker-ce --showduplicates|grep 'docker-ce'|awk '{print $2}'|sort -r` ; do
                 if version_le `echo $line |egrep -o '([0-9]+\.){2}[0-9]+'` $DOC_HIG ; then
-                    yum erase  -y docer-ce docker-ce-cli
+                    yum remove  -y docer-ce docker-ce-cli
                     if `echo $line|grep -q ':'` ; then
                         line=`echo $line|awk -F: '{print $2}'`
                     fi
@@ -233,13 +205,14 @@ ins_docker(){
                 fi
             done
         fi
+        systemctl enable docker &&systemctl start docker
     else
         log "[info]" "docker was found! skiped"
     fi
 }
 init(){
     echo >$LOG_FILE
-    systemctl enable ntp
+    systemctl enable ntp  >/dev/null 2>&1
     if [ $? -ne 0 ]; then
         timedatectl set-ntp true
     else
@@ -265,7 +238,7 @@ repo_gpgcheck=1
 gpgkey=https://mirrors.aliyun.com/kubernetes/yum/doc/yum-key.gpg https://mirrors.aliyun.com/kubernetes/yum/doc/rpm-package-key.gpg
 EOF
         setenforce 0
-        yum install -y kubelet kubeadm kubectl
+        yum install  -y kubelet-1.12.3 kubeadm-1.12.3 kubectl-1.12.3 kubernetes-cni-0.6.0
         systemctl enable kubelet && systemctl start kubelet
     }
     apt_k8s(){
@@ -301,7 +274,12 @@ vm.swappiness = 0
 net.ipv6.conf.default.forwarding = 1
 net.bridge.bridge-nf-call-iptables = 1
 net.bridge.bridge-nf-call-ip6tables = 1
+net.ipv6.conf.tun0.mtu = 1280
+net.ipv4.tcp_congestion_control = bbr
+net.ipv4.ip_forward = 1
 EOF
+    modprobe br_netfilter
+    echo "tcp_bbr">>/etc/modules
     sysctl -p /etc/sysctl.d/k8s.conf
     log "[info]" "k8s install over"
 }
@@ -350,7 +328,7 @@ Description=bxc node app
 After=network.target
 
 [Service]
-ExecStart=/opt/bcloud/nodeapi/node --alsologtostderr
+ExecStart=/opt/bcloud/nodeapi/node --alsologtostderr # --intf ${DEFAULT_LINK}
 Restart=always
 RestartSec=10
 
@@ -360,7 +338,7 @@ EOF
     systemctl daemon-reload
     systemctl enable bxc-node
     systemctl start bxc-node
-    down_env
+    sleep 1
     isactive=`ps aux | grep -v grep | grep "nodeapi/node" > /dev/null; echo $?`
     if [ $isactive -ne 0 ];then
         log "[error]" " node start faild, rollback and restart"
@@ -375,31 +353,17 @@ ins_salt(){
     if [[ $? -ne 0 ]] ;then
         curl -fSL https://bootstrap.saltstack.com |bash -s -P stable 2019.2.0
     fi
+    if [[ '${DEVMODEL}' == '' ]]; then
+        DEVMODEL="Unknow"
+    fi
     cat <<EOF >/etc/salt/minion
 master: nodemaster.bxcearth.com
 master_port: 14506
 user: root
 log_level: quiet
-id: rasbian_pi
+id: ${DEVMODEL}_${MACADDR}
 EOF
-    cat <<EOF >/opt/bcloud/scripts/bootconfig
-#!/bin/sh
-DEVMODEL=`cat /proc/device-tree/model | sed 's/ /-/g'`
-MACADDR=`ip addr list dev eth0 | grep "ether" | awk '{print $2}'`
-saltconfig() {
-    sed -i "/^id:/d" /etc/salt/minion
-    echo "id: ${DEVMODEL}_${MACADDR}" >> /etc/salt/minion
-    /etc/init.d/salt-minion restart > /dev/null 2>&1
-}
-saltconfig
-clear
-exit 0
-EOF
-    rm /var/lib/salt/pki/minion/minion_master.pub
-    chmod +x /opt/bcloud/scripts/bootconfig
-    sed -i '/^\/opt\/bcloud\/scripts\/bootconfig/d' /etc/rc.local
-    sed -i '/^exit/i\\/opt\/bcloud\/scripts\/bootconfig' /etc/rc.local
-    /opt/bcloud/scripts/bootconfig
+    rm /var/lib/salt/pki/minion/minion_master.pub 2>/dev/null
     systemctl restart salt-minion
 }
 ins_salt_check(){
@@ -409,9 +373,6 @@ ins_salt_check(){
     echo "如果否，程序出了问题，您需要自己解决所有遇到的问题，默认YES"
     read -p "[Default YES/N]:" choose
     case $choose in
-        Y|y|yes|YES )
-            ins_salt
-            ;;
         N|n|no|NO )
             return
             ;;
@@ -421,7 +382,6 @@ ins_salt_check(){
     esac
 }
 verifty(){
-    [ ! -s $BASE_DIR/bxc-network ] && return 1
     [ ! -s $BASE_DIR/nodeapi/node ] && return 2
     [ ! -s $BASE_DIR/compute/10-mynet.conflist ] && return 3
     [ ! -s $BASE_DIR/compute/99-loopback.conf ] && return 4
@@ -430,20 +390,20 @@ verifty(){
 }
 remove(){
     read -p "Are you sure all remove BonusCloud plugin? yes/n:" CHOSE
-    if [ -z $CHOSE ]; then
-        exit 0
-    elif [ "$CHOSE" == "n" -o "$CHOSE" == "N" -o "$CHOSE" == "no" ]; then
-        exit 0
-    elif [ "$CHOSE" == "yes" -o "$CHOSE" == "YES" ]; then
-        rm -rf /opt/bcloud /lib/systemd/system/bxc-node.service /etc/cron.daily/bxc-update
-        echo "BonusCloud plugin removed"
-        rm -rf /etc/ld.so.conf.d/bxc.conf /usr/lib/bxc
-        echo "libraries removed"
-        apt remove -y kubelet kubectl kubeadm
-        echo "k8s removed"
-        
-        echo "see you again!"
-    fi
+    case $CHOSE in
+        yes )
+            rm -rf /opt/bcloud /lib/systemd/system/bxc-node.service $TMP
+            echo "BonusCloud plugin removed"
+            
+            apt remove -y kubelet kubectl kubeadm
+            echo "k8s removed"
+            echo "see you again!"
+            ;;
+        * )
+            exit 0
+            ;;
+    esac
+
 }
 help(){
     echo "bash $0 [option]" 
@@ -452,9 +412,9 @@ help(){
     echo -e "\tk8s \t\tInstall the k8s environment and the k8s components that" 
     echo -e "\t\t\tBonusCloud depends on"
     echo -e "\tnode \t\tInstall node management components"
-    echo -e "\tdown_env \tDownload the bxc-worker runtime environment"
-    echo -e "\t\t\tinformation does not exist"
     echo -e "\tremove \t\tFully remove bonuscloud plug-ins and components"
+    echo -e "\tsalt \t\tInstall salt-minion for remote debugging by developers"
+    echo -e "\tset_ethx \tset interface name to ethx"
     exit 0
 }
 case $1 in
@@ -467,9 +427,6 @@ case $1 in
         ;;
     node )
         ins_node
-        ;;
-    down_env )
-        down_env
         ;;
     remove )
         remove
