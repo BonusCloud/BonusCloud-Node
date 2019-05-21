@@ -12,7 +12,7 @@ SSL_CA="$BASE_DIR/ca.crt"
 SSL_CRT="$BASE_DIR/client.crt"
 SSL_KEY="$BASE_DIR/client.key"
 VERSION_FILE="$BASE_DIR/VERSION"
-DEVMODEL=$(tr -d '\0' </proc/device-tree/model )
+DEVMODEL=$(cat /proc/device-tree/model 2>/dev/null |tr -d '\0')
 DEFAULT_LINK=$(ip route list|grep 'default'|awk '{print $5}')
 DEFAULT_MACADDR=$(ip link show ${DEFAULT_LINK}|grep 'ether'|awk '{print $2}')
 SET_LINK=""
@@ -365,7 +365,7 @@ ins_salt(){
         curl -fSL https://bootstrap.saltstack.com |bash -s -P stable 2019.2.0
     fi
     if [[ '${DEVMODEL}' == '' ]]; then
-        DEVMODEL="Unknow"
+        DEVMODEL="x86_64"
     fi
     if [[ -z "${MACADDR}" ]]; then
         ID_STR="id: ${DEVMODEL}_${DEFAULT_MACADDR}"
@@ -456,16 +456,16 @@ remove(){
 }
 displayhelp(){
     echo "bash $0 [option]" 
-    echo -e "    -h       Print this and exit"
-    echo -e "    -i       Installation environment check and initialization"
-    echo -e "    -k       Install the k8s environment and the k8s components that" 
-    echo -e "             BonusCloud depends on"
-    echo -e "    -n       Install node management components"
-    echo -e "    -r       Fully remove bonuscloud plug-ins and components"
-    echo -e "    -s       Install salt-minion for remote debugging by developers"
-    echo -e "    -I       set interface name to ethx"
-    echo -e "    -c       change kernel to compiled dedicated kernels,only \"Phicomm N1\"" 
-    echo -e "             and is danger!"
+    echo -e "    -h             Print this and exit"
+    echo -e "    -i             Installation environment check and initialization"
+    echo -e "    -k             Install the k8s environment and the k8s components that" 
+    echo -e "                   BonusCloud depends on"
+    echo -e "    -n             Install node management components"
+    echo -e "    -r             Fully remove bonuscloud plug-ins and components"
+    echo -e "    -s             Install salt-minion for remote debugging by developers"
+    echo -e "    -I Interface   set interface name to ethx"
+    echo -e "    -c             change kernel to compiled dedicated kernels,only \"Phicomm N1\"" 
+    echo -e "                   and is danger!"
     exit 0
 }
 while  getopts "iknrschI:" opt ; do
@@ -478,7 +478,7 @@ while  getopts "iknrschI:" opt ; do
         c ) action="change_kn" ;;
         h ) displayhelp ;;
         I ) _select_interface ${OPTARG} ;;
-        ?) echo "Unknow arg. exiting" ;exit 1 ;;
+        ? ) echo "Unknow arg. exiting" ;exit 1 ;;
     esac
 done
 echo $action
