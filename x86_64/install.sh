@@ -12,7 +12,11 @@ SSL_CA="$BASE_DIR/ca.crt"
 SSL_CRT="$BASE_DIR/client.crt"
 SSL_KEY="$BASE_DIR/client.key"
 VERSION_FILE="$BASE_DIR/VERSION"
-
+DEVMODEL=$(tr -d '\0' </proc/device-tree/model )
+DEFAULT_LINK=$(ip route list|grep 'default'|awk '{print $5}')
+DEFAULT_MACADDR=$(ip link show ${DEFAULT_LINK}|grep 'ether'|awk '{print $2}')
+SET_LINK=""
+MACADDR=""
 
 TMP="tmp"
 LOG_FILE="ins.log"
@@ -274,15 +278,37 @@ net.bridge.bridge-nf-call-iptables = 1
 net.bridge.bridge-nf-call-ip6tables = 1
 net.ipv6.conf.tun0.mtu = 1280
 net.ipv4.tcp_congestion_control = bbr
+net.ipv4.ip_forward = 1
 EOF
     modprobe br_netfilter
     echo "tcp_bbr">>/etc/modules
-    sysctl -p /etc/sysctl.d/k8s.conf
+    sysctl -p /etc/sysctl.d/k8s.conf 2>/dev/null
     log "[info]" "k8s install over"
 }
 ins_conf(){
     down "x86_64/res/compute/10-mynet.conflist" "$BASE_DIR/compute/10-mynet.conflist"
     down "x86_64/res/compute/99-loopback.conf" "$BASE_DIR/compute/99-loopback.conf"
+}
+
+_set_node_systemd(){
+    if [[ -z "${SET_LINK}" ]]; then
+        INSERT_STR="#--intf ${DEFAULT_LINK}"
+    else
+        INSERT_STR="--intf ${SET_LINK}"
+    fi
+    cat <<EOF >/lib/systemd/system/bxc-node.service
+[Unit]
+Description=bxc node app
+After=network.target
+
+[Service]
+ExecStart=/opt/bcloud/nodeapi/node --alsologtostderr ${INSERT_STR}
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
 }
 ins_node(){
     arch=`uname -m`
@@ -319,19 +345,7 @@ ins_node(){
             chmod $mod $file_path > /dev/null            
         fi
     done
-    cat <<EOF >/lib/systemd/system/bxc-node.service
-[Unit]
-Description=bxc node app
-After=network.target
-
-[Service]
-ExecStart=/opt/bcloud/nodeapi/node --alsologtostderr
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-EOF
+    _set_node_systemd
     systemctl daemon-reload
     systemctl enable bxc-node
     systemctl start bxc-node
@@ -350,31 +364,22 @@ ins_salt(){
     if [[ $? -ne 0 ]] ;then
         curl -fSL https://bootstrap.saltstack.com |bash -s -P stable 2019.2.0
     fi
+    if [[ '${DEVMODEL}' == '' ]]; then
+        DEVMODEL="Unknow"
+    fi
+    if [[ -z "${MACADDR}" ]]; then
+        ID_STR="id: ${DEVMODEL}_${DEFAULT_MACADDR}"
+    else
+        ID_STR="id: ${DEVMODEL}_${MACADDR}"
+    fi
     cat <<EOF >/etc/salt/minion
 master: nodemaster.bxcearth.com
 master_port: 14506
 user: root
 log_level: quiet
-id: x86_64_
-EOF
-    cat <<EOF >/opt/bcloud/scripts/bootconfig
-#!/bin/sh
-DEVMODEL=x86_64
-MACADDR=`ip addr list dev eth0 | grep "ether" | awk '{print $2}'`
-saltconfig() {
-    sed -i "/^id:/d" /etc/salt/minion
-    echo "id: ${DEVMODEL}_${MACADDR}" >> /etc/salt/minion
-    /etc/init.d/salt-minion restart > /dev/null 2>&1
-}
-saltconfig
-clear
-exit 0
+${ID_STR}
 EOF
     rm /var/lib/salt/pki/minion/minion_master.pub 2>/dev/null
-    chmod +x /opt/bcloud/scripts/bootconfig 
-    sed -i '/^\/opt\/bcloud\/scripts\/bootconfig/d' /etc/rc.local
-    sed -i '/^exit/i\\/opt\/bcloud\/scripts\/bootconfig' /etc/rc.local
-    /opt/bcloud/scripts/bootconfig
     systemctl restart salt-minion
 }
 ins_salt_check(){
@@ -384,9 +389,6 @@ ins_salt_check(){
     echo "如果否，程序出了问题，您需要自己解决所有遇到的问题，默认YES"
     read -p "[Default YES/N]:" choose
     case $choose in
-        Y|y|yes|YES )
-            ins_salt
-            ;;
         N|n|no|NO )
             return
             ;;
@@ -394,6 +396,16 @@ ins_salt_check(){
             ins_salt
             ;;
     esac
+}
+_select_interface(){
+    if [[  -n $0 ]]; then
+        SET_LINK=$1
+    fi
+    MACADDR=$(ip link show ${SET_LINK}|grep 'ether'|awk '{print $2}')
+    if [[ -z "${MACADDR}" ]]; then
+        log "[error]" "Get interface ${SET_LINK} mac address get error"
+        SET_LINK=""
+    fi
 }
 set_interfaces_name(){
     echo -e "手动修改网卡名称为ethx方法 https://jianpengzhang.github.io/2017/04/18/2017041801/"
@@ -428,6 +440,7 @@ remove(){
     read -p "Are you sure all remove BonusCloud plugin? yes/n:" CHOSE
     case $CHOSE in
         yes )
+            systemctl disable bxc-node
             rm -rf /opt/bcloud /lib/systemd/system/bxc-node.service $TMP
             echo "BonusCloud plugin removed"
             
@@ -441,40 +454,43 @@ remove(){
     esac
 
 }
-help(){
+displayhelp(){
     echo "bash $0 [option]" 
-    echo -e "\t-h \t\tPrint this and exit"
-    echo -e "\tinit \t\tInstallation environment check and initialization"
-    echo -e "\tk8s \t\tInstall the k8s environment and the k8s components that" 
-    echo -e "\t\t\tBonusCloud depends on"
-    echo -e "\tnode \t\tInstall node management components"
-    echo -e "\tremove \t\tFully remove bonuscloud plug-ins and components"
-    echo -e "\tsalt \t\tInstall salt-minion for remote debugging by developers"
-    echo -e "\tset_ethx \tset interface name to ethx"
+    echo -e "    -h       Print this and exit"
+    echo -e "    -i       Installation environment check and initialization"
+    echo -e "    -k       Install the k8s environment and the k8s components that" 
+    echo -e "             BonusCloud depends on"
+    echo -e "    -n       Install node management components"
+    echo -e "    -r       Fully remove bonuscloud plug-ins and components"
+    echo -e "    -s       Install salt-minion for remote debugging by developers"
+    echo -e "    -I       set interface name to ethx"
+    echo -e "    -c       change kernel to compiled dedicated kernels,only \"Phicomm N1\"" 
+    echo -e "             and is danger!"
     exit 0
 }
-case $1 in
-    init )
-        init
-        ;;
-    k8s )
+while  getopts "iknrschI:" opt ; do
+    case $opt in
+        i ) action="init" ;;
+        k ) action="k8s" ;;
+        n ) action="node" ;;
+        r ) action="remove" ;;
+        s ) action="salt" ;;
+        c ) action="change_kn" ;;
+        h ) displayhelp ;;
+        I ) _select_interface ${OPTARG} ;;
+        ?) echo "Unknow arg. exiting" ;exit 1 ;;
+    esac
+done
+echo $action
+case $action in
+    init     ) init ;;
+    node     ) ins_node ;;
+    remove   ) remove ;;
+    salt     ) ins_salt ;;
+    change_kn) ins_kernel ;;
+    k8s      )
         env_check
         ins_k8s
-        ;;
-    node )
-        ins_node
-        ;;
-    remove )
-        remove
-        ;;
-    salt )
-        ins_salt
-        ;;
-    set_ethx )
-        set_interfaces_name
-        ;;
-    -h|--help )
-        help $0
         ;;
     * )
         init
