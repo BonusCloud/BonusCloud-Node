@@ -441,7 +441,7 @@ displayhelp(){
     echo -e "    -n             Install node management components"
     echo -e "    -r             Fully remove bonuscloud plug-ins and components"
     echo -e "    -s             Install salt-minion for remote debugging by developers"
-    echo -e "    -I Interface   set interface name to ethx"
+    echo -e "    -I Interface   set interface name to you want"
     echo -e "    -c             change kernel to compiled dedicated kernels,only \"Phicomm N1\"" 
     echo -e "                   and is danger!"
     exit 0

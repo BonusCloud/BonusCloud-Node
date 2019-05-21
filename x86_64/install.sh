@@ -463,12 +463,13 @@ displayhelp(){
     echo -e "    -n             Install node management components"
     echo -e "    -r             Fully remove bonuscloud plug-ins and components"
     echo -e "    -s             Install salt-minion for remote debugging by developers"
-    echo -e "    -I Interface   set interface name to ethx"
+    echo -e "    -I Interface   set interface name to you want"
     echo -e "    -c             change kernel to compiled dedicated kernels,only \"Phicomm N1\"" 
     echo -e "                   and is danger!"
+    echo -e "    -e             set interfaces name to ethx"
     exit 0
 }
-while  getopts "iknrschI:" opt ; do
+while  getopts "iknrscehI:" opt ; do
     case $opt in
         i ) action="init" ;;
         k ) action="k8s" ;;
@@ -476,6 +477,7 @@ while  getopts "iknrschI:" opt ; do
         r ) action="remove" ;;
         s ) action="salt" ;;
         c ) action="change_kn" ;;
+        e ) action="set_ethx" ;;
         h ) displayhelp ;;
         I ) _select_interface ${OPTARG} ;;
         ? ) echo "Unknow arg. exiting" ;exit 1 ;;
@@ -488,6 +490,7 @@ case $action in
     remove   ) remove ;;
     salt     ) ins_salt ;;
     change_kn) ins_kernel ;;
+    set_ethx ) set_interfaces_name ;;
     k8s      )
         env_check
         ins_k8s
