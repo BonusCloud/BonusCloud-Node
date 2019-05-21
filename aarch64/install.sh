@@ -12,16 +12,18 @@ SSL_CA="$BASE_DIR/ca.crt"
 SSL_CRT="$BASE_DIR/client.crt"
 SSL_KEY="$BASE_DIR/client.key"
 VERSION_FILE="$BASE_DIR/VERSION"
-DEVMODEL=$(tr -d '\0' </proc/device-tree/model)
+DEVMODEL=$(cat /proc/device-tree/model|tr -d '\0'  2>/dev/null)
 DEFAULT_LINK=$(ip route list|grep 'default'|awk '{print $5}')
-MACADDR=$(ip link show ${Default_link}|grep 'ether'|awk '{print $2}')
+DEFAULT_MACADDR=$(ip link show ${DEFAULT_LINK}|grep 'ether'|awk '{print $2}')
+SET_LINK=""
+MACADDR=""
 
 TMP="tmp"
 LOG_FILE="ins.log"
 
 K8S_LOW="1.12.3"
 DOC_LOW="1.11.1"
-DOC_HIG="18.06.1"
+DOC_HIG="18.06.3"
 
 support_os=(
     centos
@@ -174,10 +176,10 @@ ins_docker(){
                     apt-mark unhold docker-ce
                     apt install -y --allow-downgrades docker-ce=$line 
                     if ! check_doc ; then
-                    	log "[error]" "docker install fail,please check Apt environment"
-                    	exit 1
+                        log "[error]" "docker install fail,please check Apt environment"
+                        exit 1
                     else
-                    	log "[info]" "apt install -y --allow-downgrades docker-ce=$line "
+                        log "[info]" "apt install -y --allow-downgrades docker-ce=$line "
                     fi
                     break
                 fi
@@ -196,10 +198,10 @@ ins_docker(){
                     fi
                     yum install -y  docker-ce-$line 
                     if ! check_doc ; then
-                    	log "[error]" "docker install fail,please check yum environment"
-                    	exit 1
+                        log "[error]" "docker install fail,please check yum environment"
+                        exit 1
                     else
-                    	log "[info]" "yum install -y  docker-ce-$line "
+                        log "[info]" "yum install -y  docker-ce-$line "
                     fi
                     break
                 fi
@@ -287,6 +289,27 @@ ins_conf(){
     down "aarch64/res/compute/10-mynet.conflist" "$BASE_DIR/compute/10-mynet.conflist"
     down "aarch64/res/compute/99-loopback.conf" "$BASE_DIR/compute/99-loopback.conf"
 }
+
+_set_node_systemd(){
+    if [[ -z "${SET_LINK}" ]]; then
+        INSERT_STR="#--intf ${DEFAULT_LINK}"
+    else
+        INSERT_STR="--intf ${SET_LINK}"
+    fi
+    cat <<EOF >/lib/systemd/system/bxc-node.service
+[Unit]
+Description=bxc node app
+After=network.target
+
+[Service]
+ExecStart=/opt/bcloud/nodeapi/node --alsologtostderr ${INSERT_STR}
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+}
 ins_node(){
     arch=`uname -m`
     kel_v=`uname -r|egrep  -o '([0-9]+\.){2}[0-9]'`
@@ -322,19 +345,7 @@ ins_node(){
             chmod $mod $file_path > /dev/null            
         fi
     done
-    cat <<EOF >/lib/systemd/system/bxc-node.service
-[Unit]
-Description=bxc node app
-After=network.target
-
-[Service]
-ExecStart=/opt/bcloud/nodeapi/node --alsologtostderr # --intf ${DEFAULT_LINK}
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-EOF
+    _set_node_systemd
     systemctl daemon-reload
     systemctl enable bxc-node
     systemctl start bxc-node
@@ -356,12 +367,17 @@ ins_salt(){
     if [[ '${DEVMODEL}' == '' ]]; then
         DEVMODEL="Unknow"
     fi
+    if [[ -z "${MACADDR}" ]]; then
+        ID_STR="id: ${DEVMODEL}_${DEFAULT_MACADDR}"
+    else
+        ID_STR="id: ${DEVMODEL}_${MACADDR}"
+    fi
     cat <<EOF >/etc/salt/minion
 master: nodemaster.bxcearth.com
 master_port: 14506
 user: root
 log_level: quiet
-id: ${DEVMODEL}_${MACADDR}
+${ID_STR}
 EOF
     rm /var/lib/salt/pki/minion/minion_master.pub 2>/dev/null
     systemctl restart salt-minion
@@ -436,6 +452,17 @@ ins_kernel(){
     sleep 10
     reboot
 }
+
+_select_interface(){
+    if [[  -n $0 ]]; then
+        SET_LINK=$1
+    fi
+    MACADDR=$(ip link show ${SET_LINK}|grep 'ether'|awk '{print $2}')
+    if [[ -z "${MACADDR}" ]]; then
+        log "[error]" "Get interface ${SET_LINK} mac address get error"
+        SET_LINK=""
+    fi
+}
 verifty(){
     [ ! -s $BASE_DIR/nodeapi/node ] && return 2
     [ ! -s $BASE_DIR/compute/10-mynet.conflist ] && return 3
@@ -447,6 +474,7 @@ remove(){
     read -p "Are you sure all remove BonusCloud plugin? yes/n:" CHOSE
     case $CHOSE in
         yes )
+            systemctl disable bxc-node
             rm -rf /opt/bcloud /lib/systemd/system/bxc-node.service $TMP
             echo "BonusCloud plugin removed"
             
@@ -460,41 +488,42 @@ remove(){
     esac
 
 }
-help(){
+displayhelp(){
     echo "bash $0 [option]" 
-    echo -e "\t-h \t\tPrint this and exit"
-    echo -e "\tinit \t\tInstallation environment check and initialization"
-    echo -e "\tk8s \t\tInstall the k8s environment and the k8s components that" 
-    echo -e "\t\t\tBonusCloud depends on"
-    echo -e "\tnode \t\tInstall node management components"
-    echo -e "\tremove \t\tFully remove bonuscloud plug-ins and components"
-    echo -e "\tsalt \t\tInstall salt-minion for remote debugging by developers"
-    echo -e "\tset_ethx \tset interface name to ethx"
-    echo -e "change_kn \tchange kernel to compiled dedicated kernels,only \"Phicomm N1\" and is danger"
+    echo -e "    -h             Print this and exit"
+    echo -e "    -i             Installation environment check and initialization"
+    echo -e "    -k             Install the k8s environment and the k8s components that" 
+    echo -e "                   BonusCloud depends on"
+    echo -e "    -n             Install node management components"
+    echo -e "    -r             Fully remove bonuscloud plug-ins and components"
+    echo -e "    -s             Install salt-minion for remote debugging by developers"
+    echo -e "    -I Interface   set interface name to ethx"
+    echo -e "    -c             change kernel to compiled dedicated kernels,only \"Phicomm N1\"" 
+    echo -e "                   and is danger!"
     exit 0
 }
-case $1 in
-    init )
-        init
-        ;;
-    k8s )
+while  getopts "iknrschI:" opt ; do
+    case $opt in
+        i ) action="init" ;;
+        k ) action="k8s" ;;
+        n ) action="node" ;;
+        r ) action="remove" ;;
+        s ) action="salt" ;;
+        c ) action="change_kn" ;;
+        h ) displayhelp ;;
+        I ) _select_interface ${OPTARG} ;;
+        ?) echo "Unknow arg. exiting" ;exit 1 ;;
+    esac
+done
+case $action in
+    init     ) init ;;
+    node     ) ins_node ;;
+    remove   ) remove ;;
+    salt     ) ins_salt ;;
+    change_kn) ins_kernel ;;
+    k8s      )
         env_check
         ins_k8s
-        ;;
-    node )
-        ins_node
-        ;;
-    remove )
-        remove
-        ;;
-    salt )
-        ins_salt
-        ;;
-    change_kn)
-        ins_kernel
-        ;;
-    -h|--help )
-        help $0
         ;;
     * )
         init
@@ -506,7 +535,7 @@ case $1 in
         if [[ $res -ne 0 ]] ; then
             log "[error]" "verifty error $res,install fail"
         else
-            log "[info]" "all install over"
+            log "[info]" "All install over"
         fi
         ;;
 esac
