@@ -12,7 +12,7 @@ SSL_CA="$BASE_DIR/ca.crt"
 SSL_CRT="$BASE_DIR/client.crt"
 SSL_KEY="$BASE_DIR/client.key"
 VERSION_FILE="$BASE_DIR/VERSION"
-DEVMODEL=$(cat /proc/device-tree/model|tr -d '\0'  2>/dev/null)
+DEVMODEL=$(cat /proc/device-tree/model 2>/dev/null |tr -d '\0')
 DEFAULT_LINK=$(ip route list|grep 'default'|awk '{print $5}')
 DEFAULT_MACADDR=$(ip link show ${DEFAULT_LINK}|grep 'ether'|awk '{print $2}')
 SET_LINK=""
@@ -406,6 +406,22 @@ change_net(){
     chmod +x /etc/network/if-pre-up.d/mtu
     apt install -y netplug
 }
+ins_kernel_from_armbian(){
+
+    kernel_version=` uname -r|egrep -o '([0-9]+\.){2}[0-9]+'`
+    if version_ge $kernel_version 5.0.0 ; then
+        echo "This system kernel version greater than 5.0.0 ,nothing can do"
+        return 
+    fi
+    _device=`apt list linux-dtb-*|grep linux|awk -F/ '{print $1}'`
+    device=${_device:10}
+    # don't run it ,this unverified
+    aptitude remove ~nlinux-dtb ~nlinux-u-boot ~nlinux-image ~nlinux-headers
+    aptitude remove ~nlinux-firmware ~narmbian-firmware ~nlinux-$(lsb_release -cs)-root
+    apt install -y linux-image-dev-${device} linux-dtb-dev-${device} linux-headers-dev-${device}
+    apt install -y linux-u-boot-${device}-dev linux-$(lsb_release -cs)-root-dev-${device}
+    apt-get install armbian-firmware ${device}-tools swconfig a10disp
+}
 ins_kernel(){
     if [[ "${DEVMODEL}" != "Phicomm N1" ]]; then
         echo "this device not ${device_tree} exit"
@@ -512,7 +528,7 @@ while  getopts "iknrschI:" opt ; do
         c ) action="change_kn" ;;
         h ) displayhelp ;;
         I ) _select_interface ${OPTARG} ;;
-        ?) echo "Unknow arg. exiting" ;exit 1 ;;
+        ? ) echo "Unknow arg. exiting" ;exit 1 ;;
     esac
 done
 case $action in
