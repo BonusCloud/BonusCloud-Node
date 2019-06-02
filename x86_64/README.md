@@ -27,7 +27,9 @@ or use APP
     -n             Install node management components
     -r             Fully remove bonuscloud plug-ins and components
     -s             Install salt-minion for remote debugging by developers
-    -I Interface   set interface name to you want
     -c             change kernel to compiled dedicated kernels,only "Phicomm N1"
                    and is danger!
     -e             set interfaces name to ethx
+    -g             Install network job only
+    -I Interface   set interface name to you want
+    -S             Don'n show Info level output
