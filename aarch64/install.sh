@@ -212,6 +212,14 @@ ins_docker(){
         log "[info]" "docker was found! skiped"
     fi
 }
+
+pull_docker_image(){
+    ins_docker
+    docker pull registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/pause:arm-3.1
+    docker pull registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/kube-proxy-arm:v1.12.3
+    docker tag registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/pause:arm-3.1 k8s.gcr.io/pause:3.1
+    docker tag registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/kube-proxy-arm:v1.12.3 k8s.gcr.io/kube-proxy:v1.12.3 
+}
 init(){
     echo >$LOG_FILE
     systemctl enable ntp  >/dev/null 2>&1
@@ -265,12 +273,8 @@ EOF
     else
         log "[info]" " k8s was found! skip"
     fi
-    
-    docker pull registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/pause:arm-3.1
-    docker pull registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/kube-proxy-arm:v1.12.3
-    docker tag registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/pause:arm-3.1 k8s.gcr.io/pause:3.1
-    docker tag registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/kube-proxy-arm:v1.12.3 k8s.gcr.io/kube-proxy:v1.12.3
-    
+    pull_docker_image
+     
     cat <<EOF >  /etc/sysctl.d/k8s.conf
 vm.swappiness = 0
 net.ipv6.conf.default.forwarding = 1
@@ -513,16 +517,17 @@ displayhelp(){
     echo -e "    -n             Install node management components"
     echo -e "    -r             Fully remove bonuscloud plug-ins and components"
     echo -e "    -s             Install salt-minion for remote debugging by developers"
-    echo -e "    -I Interface   set interface name to ethx"
+    echo -e "    -I Interface   set interface name to you want"
     echo -e "    -c             change kernel to compiled dedicated kernels,only \"Phicomm N1\"" 
     echo -e "                   and is danger!"
     exit 0
 }
-while  getopts "iknrschI:" opt ; do
+while  getopts "ikndrschI:" opt ; do
     case $opt in
         i ) action="init" ;;
         k ) action="k8s" ;;
         n ) action="node" ;;
+        d ) ins_docker ;;
         r ) action="remove" ;;
         s ) action="salt" ;;
         c ) action="change_kn" ;;

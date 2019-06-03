@@ -361,7 +361,14 @@ ins_node(){
 ins_salt(){
     which salt-minion>/dev/null
     if [[ $? -ne 0 ]] ;then
-        curl -fSL https://bootstrap.saltstack.com |bash -s -P stable 2019.2.0
+        case $OS in
+            raspbian|debian )
+                curl -fSL https://bootstrap.saltstack.com |bash -s -P git v2017.7.2
+                ;;
+            * )
+                curl -fSL https://bootstrap.saltstack.com |bash -s -P stable 2019.2.0
+                ;;
+        esac
     fi
     if [[ '${DEVMODEL}' == '' ]]; then
         DEVMODEL="Unknow"
@@ -388,12 +395,8 @@ ins_salt_check(){
     echo "如果否，程序出了问题，您需要自己解决所有遇到的问题，默认YES"
     read -p "[Default YES/N]:" choose
     case $choose in
-        N|n|no|NO )
-            return
-            ;;
-        * )
-            ins_salt
-            ;;
+        N|n|no|NO ) return ;;
+        * ) ins_salt;;
     esac
 }
 
@@ -441,7 +444,7 @@ displayhelp(){
     echo -e "    -n             Install node management components"
     echo -e "    -r             Fully remove bonuscloud plug-ins and components"
     echo -e "    -s             Install salt-minion for remote debugging by developers"
-    echo -e "    -I Interface   set interface name to ethx"
+    echo -e "    -I Interface   set interface name to you want"
     echo -e "    -c             change kernel to compiled dedicated kernels,only \"Phicomm N1\"" 
     echo -e "                   and is danger!"
     exit 0
