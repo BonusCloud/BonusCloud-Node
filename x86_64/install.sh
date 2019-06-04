@@ -14,7 +14,7 @@ SSL_KEY="$BASE_DIR/client.key"
 VERSION_FILE="$BASE_DIR/VERSION"
 DEVMODEL=$(cat /proc/device-tree/model 2>/dev/null |tr -d '\0')
 DEFAULT_LINK=$(ip route list|grep 'default'|awk '{print $5}')
-DEFAULT_MACADDR=$(ip link show ${DEFAULT_LINK}|grep 'ether'|awk '{print $2}')
+DEFAULT_MACADDR=$(ip link show "${DEFAULT_LINK}"|grep 'ether'|awk '{print $2}')
 SET_LINK=""
 MACADDR=""
 
@@ -40,40 +40,40 @@ mkdir -p $TMP
 DISPLAYINFO="1"
 
 echoerr(){
-    echo -e "\033[1;31m$1\033[0m"
+    printf "\033[1;31m$1\033[0m"
 }
 echoinfo(){
-    echo -e "\033[1;32m$1\033[0m"
+    printf "\033[1;32m$1\033[0m"
 }
 echowarn(){
-    echo -e "\033[1;33m$1\033[0m"
+    printf "\033[1;33m$1\033[0m"
 }
 log(){
-    timeOut="[`date '+%Y-%m-%d %H:%M:%S'`]"
+    timeOut="[$(date '+%Y-%m-%d %H:%M:%S')]"
     case $1 in
         "[error]" )
             echo "${timeOut} $1 $2" >>$LOG_FILE
-            echoerr "${timeOut} $1 $2"
+            echoerr "${timeOut} $1 $2\n"
             ;;
         "[info]" )
             echo "${timeOut} $1 $2" >>$LOG_FILE
-            [[ "${DISPLAYINFO}" == "1"x ]]&&echoinfo "${timeOut} $1 $2"
+            [[ "${DISPLAYINFO}" == "1"x ]]&&echoinfo "${timeOut} $1 $2\n"
             ;;
         "[warn]" )
             echo "${timeOut} $1 $2" >>$LOG_FILE
-            echowarn "${timeOut} $1 $2"
+            echowarn "${timeOut} $1 $2\n"
             ;;
     esac
 }
 env_check(){
     # Check if the system is x86_64
-    if [[ "`uname -m |grep -qE 'x86_64';echo $?`" -ne 0 ]]; then
+    if [[ "$(uname -m |grep -qE 'x86_64';echo $?)" -ne 0 ]]; then
         log "[error]" "this is 64 system install script for x86_64 ,if you's not ,please install correspond system"
         exit 1
     fi
     # Detection package manager
-    ret_a=`which apt >/dev/null;echo $?`
-    ret_y=`which yum >/dev/null;echo $?`
+    ret_a=$(which apt >/dev/null;echo $?)
+    ret_y=$(which yum >/dev/null;echo $?)
     if [[ ${ret_a} -eq 0 ]]; then
         PG="apt"
     elif [[ ${ret_y} -eq 0 ]]; then
@@ -82,8 +82,8 @@ env_check(){
         log "[error]" "\"apt\" or \"yum\" ,not found ,exit "
         exit 1
     fi
-    ret_c=`which curl >/dev/null;echo $?`
-    ret_w=`which wget >/dev/null;echo $?`
+    ret_c=$(which curl >/dev/null;echo $?)
+    ret_w=$(which wget >/dev/null;echo $?)
     case ${PG} in
         apt )
             $PG install -y curl wget apt-transport-https
@@ -94,9 +94,9 @@ env_check(){
     # Check if the system supports
     [ ! -s $TMP/screenfetch ]&&wget  -nv -O $TMP/screenfetch "https://raw.githubusercontent.com/KittyKatt/screenFetch/master/screenfetch-dev" 
     chmod +x $TMP/screenfetch
-    OS=`$TMP/screenfetch -n |grep 'OS:'|awk '{print $3}'|tr 'A-Z' 'a-z'`
+    OS=$($TMP/screenfetch -n |grep 'OS:'|awk '{print $3}'|tr 'A-Z' 'a-z')
     if [[ -z "$OS" ]]; then
-        read -p "The release version is not detected, please enter it manually,like \"ubuntu\"" OS
+        read -r -p "The release version is not detected, please enter it manually,like \"ubuntu\"" OS
     fi
     if ! echo "${support_os[@]}"|grep -w "$OS" &>/dev/null ; then
         log "[error]" "This system is not supported by docker, exit"
@@ -106,9 +106,9 @@ env_check(){
     fi
 }
 down(){
-    for link in ${mirror_pods[@]}; do
-        wget  -nv "${link}/$1" -O $2
-        if [[ $? -eq 0 ]]; then
+    for link in "${mirror_pods[@]}"; do
+        
+        if wget -nv "${link}/$1" -O "$2" ; then
             break
         else
             continue
@@ -120,45 +120,44 @@ down(){
 function version_ge() { test "$(echo "$@" | tr " " "\n" | sort -rV | head -n 1)" == "$1"; }
 function version_le() { test "$(echo "$@" | tr " " "\n" | sort -V | head -n 1)" == "$1"; }
 check_doc(){
-    retd=`which docker>/dev/null;echo $?`
-    if [ ${retd} -ne 0 ]; then
+    retd=$(which docker>/dev/null;echo $?)
+    if [ "${retd}" -ne 0 ]; then
         log "[info]" "docker not found"
         return 1
+    fi
+    doc_v=$(docker version |grep Version|grep -o '[0-9\.]*'|sed -n '2p')
+    if version_ge "${doc_v}" "${DOC_LOW}" && version_le "${doc_v}" "${DOC_HIG}" ; then
+        log "[info]" "docker version above ${DOC_LOW} and below ${DOC_HIG}"
+        return 0
     else
-        doc_v=`docker version |grep Version|grep -o '[0-9\.]*'|sed -n '2p'`
-        if version_ge ${doc_v} ${DOC_LOW} && version_le ${doc_v} ${DOC_HIG} ; then
-            log "[info]" "docker version above ${DOC_LOW} and below ${DOC_HIG}"
-            return 0
-        else
-            log "[info]" "docker version fail"
-            return 1
-        fi
+        log "[info]" "docker version fail"
+        return 1
     fi
 }
 check_k8s(){
-    reta=`which kubeadm>/dev/null;echo $?`
-    retl=`which kubelet>/dev/null;echo $?`
-    retc=`which kubectl>/dev/null;echo $?`
-    if [ ${reta} -ne 0 ] || [ ${retl} -ne 0 ] || [ ${retc} -ne 0 ] ; then
+    reta=$(which kubeadm>/dev/null;echo $?)
+    retl=$(which kubelet>/dev/null;echo $?)
+    retc=$(which kubectl>/dev/null;echo $?)
+    if [ "${reta}" -ne 0 ] || [ "${retl}" -ne 0 ] || [ "${retc}" -ne 0 ] ; then
         log "[info]" "k8s not found"
         return 1
     else 
-        k8s_adm=`kubeadm version|grep -o '\"v[0-9\.]*\"'|grep -o '[0-9\.]*'`
-        k8s_let=`kubelet --version|grep -o '[0-9\.]*'`
-        k8s_ctl=`kubectl  version --short --client|grep -o '[0-9\.]*'`
-        if version_ge ${k8s_adm} ${K8S_LOW} ; then
+        k8s_adm=$(kubeadm version|grep -o '\"v[0-9\.]*\"'|grep -o '[0-9\.]*')
+        k8s_let=$(kubelet --version|grep -o '[0-9\.]*')
+        k8s_ctl=$(kubectl  version --short --client|grep -o '[0-9\.]*')
+        if version_ge "${k8s_adm}" "${K8S_LOW}" ; then
             log "[info]" "kubeadm version ok"
         else
             log "[info]" "kubeadm version fail"
             return 1
         fi
-        if version_ge ${k8s_let} ${K8S_LOW} ; then
+        if version_ge "${k8s_let}" "${K8S_LOW}" ; then
             log "[info]"  "kubelet version ok"
         else
             log "[info]"  "kubelet version fail"
             return 1
         fi
-        if version_ge ${k8s_ctl} ${K8S_LOW} ; then
+        if version_ge "${k8s_ctl}" "${K8S_LOW}" ; then
             log "[info]"  "kubectl version ok"
         else
             log "[info]"  "kubectl version fail"
@@ -171,8 +170,8 @@ check_info(){
     if [ ! -s ${NODE_INFO} ]; then
         touch ${NODE_INFO}
     else
-        res=`grep -q -e '@' -e '-' ${NODE_INFO}; echo $? `
-        if [ ${res} -ne 0 ]; then
+        res=$(grep -q -e '@' -e '-' ${NODE_INFO}; echo $? )
+        if [ "${res}" -ne 0 ]; then
             log "[info]" "${NODE_INFO} file not found bcode or mail,need empty file "
             rm ${NODE_INFO}
             touch ${NODE_INFO}
@@ -183,19 +182,19 @@ check_info(){
     fi
 }
 ins_docker(){
-    if ! check_doc ; then
+    if  check_doc ; then
         log "[info]" "docker was found! skiped"
         return 0
     fi
     if [[ "$PG" == "apt" ]]; then
         # Install docker with APT
-        curl -fsSL https://download.docker.com/linux/$OS/gpg | apt-key add -
+        curl -fsSL "https://download.docker.com/linux/$OS/gpg" | apt-key add -
         echo "deb https://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/$OS  $(lsb_release -cs) stable"  >/etc/apt/sources.list.d/docker.list
         apt update
-        for line in `apt-cache madison docker-ce|awk '{print $3}'` ; do
-            if version_le `echo $line |egrep -o '([0-9]+\.){2}[0-9]+'` $DOC_HIG ; then
+        for line in $(apt-cache madison docker-ce|awk '{print $3}') ; do
+            if version_le "$(echo "$line" |grep -E -o '([0-9]+\.){2}[0-9]+')" "$DOC_HIG" ; then
                 apt-mark unhold docker-ce
-                apt install -y --allow-downgrades docker-ce=$line 
+                apt install -y --allow-downgrades docker-ce="$line" 
                 break
             fi
         done
@@ -205,13 +204,13 @@ ins_docker(){
         yum install -y yum-utils
         yum-config-manager --add-repo  https://mirrors.aliyun.com/docker-ce/linux/centos/docker-ce.repo
         yum makecache
-        for line in `yum list docker-ce --showduplicates|grep 'docker-ce'|awk '{print $2}'|sort -r` ; do
-            if version_le `echo $line |egrep -o '([0-9]+\.){2}[0-9]+'` $DOC_HIG ; then
+        for line in $(yum list docker-ce --showduplicates|grep 'docker-ce'|awk '{print $2}'|sort -r) ; do
+            if version_le "$(echo "$line" |grep -E -o '([0-9]+\.){2}[0-9]+')" "$DOC_HIG" ; then
                 yum remove  -y docer-ce docker-ce-cli
-                if `echo $line|grep -q ':'` ; then
-                    line=`echo $line|awk -F: '{print $2}'`
+                if echo "$line"|grep -q ':' ; then
+                    line=$(echo "$line"|awk -F: '{print $2}')
                 fi
-                yum install -y  docker-ce-$line 
+                yum install -y  docker-ce-"$line" 
                 break
             fi
         done
@@ -228,8 +227,7 @@ ins_docker(){
 }
 init(){
     echo >$LOG_FILE
-    systemctl enable ntp  >/dev/null 2>&1
-    if [ $? -ne 0 ]; then
+    if ! systemctl enable ntp  >/dev/null 2>&1 ; then
         timedatectl set-ntp true
     else
         systemctl start ntp
@@ -331,10 +329,10 @@ WantedBy=multi-user.target
 EOF
 }
 node_ins(){
-    arch=`uname -m`
-    kel_v=`uname -r|egrep  -o '([0-9]+\.){2}[0-9]'`
+    arch=$(uname -m)
+    kel_v=$(uname -r|grep -E -o '([0-9]+\.){2}[0-9]')
     Rlink="img-modules"
-    if  version_ge $kel_v "5.0.0" ; then
+    if  version_ge "$kel_v" "5.0.0" ; then
         Rlink="$Rlink/5.0.0-aml-N1-BonusCloud"
     fi
     down "$Rlink/info.txt" "$TMP/info.txt"
@@ -342,27 +340,27 @@ node_ins(){
         log "[error]" "wget \"$Rlink/info.txt\" -O $TMP/info.txt"
         return 1
     fi
-    for line in `grep "$arch" $TMP/info.txt`
+    for line in $(grep "$arch" $TMP/info.txt)
     do
-        git_file_name=`echo $line | awk -F: '{print $1}'`
-        git_md5_val=`echo $line | awk -F: '{print $2}'`
-        file_path=`echo $line | awk -F: '{print $3}'`
-        mod=`echo $line | awk -F: '{print $4}'`
-        local_md5_val=`[ -x $file_path ] && md5sum $file_path | awk '{print $1}'`
+        git_file_name=$(echo "$line" | awk -F: '{print $1}')
+        git_md5_val=$(echo "$line" | awk -F: '{print $2}')
+        file_path=$(echo "$line" | awk -F: '{print $3}')
+        mod=$(echo "$line" | awk -F: '{print $4}')
+        local_md5_val=$([ -x "$file_path" ] && md5sum "$file_path" | awk '{print $1}')
         
         if [[ "$local_md5_val"x == "$git_md5_val"x ]]; then
             log "[info]" "local file $file_path version equal git file version,skip"
             continue
         fi
         down "$Rlink/$git_file_name" "$TMP/$git_file_name" 
-        download_md5=`md5sum $TMP/$git_file_name | awk '{print $1}'`
+        download_md5=$(md5sum $TMP/"$git_file_name" | awk '{print $1}')
         if [ "$download_md5"x != "$git_md5_val"x ];then
             log "[error]" " download file $TMP/$git_file_name md5 $download_md5 different from git md5 $git_md5_val"
             continue
         else
             log "[info]" " $TMP/$git_file_name download success."
-            cp -f $TMP/$git_file_name $file_path > /dev/null
-            chmod $mod $file_path > /dev/null            
+            cp -f $TMP/"$git_file_name" "$file_path" > /dev/null
+            chmod "$mod" "$file_path" > /dev/null            
         fi
     done
     _set_node_systemd
@@ -370,8 +368,8 @@ node_ins(){
     systemctl enable bxc-node
     systemctl start bxc-node
     sleep 1
-    isactive=`ps aux | grep -v grep | grep "nodeapi/node" > /dev/null; echo $?`
-    if [ $isactive -ne 0 ];then
+    isactive=$(pgrep "nodeapi/node" > /dev/null; echo $?)
+    if [ "${isactive}" -ne 0 ];then
         log "[error]" " node start faild, rollback and restart"
         systemctl restart bxc-node
     else
@@ -384,13 +382,13 @@ node_remove(){
     rm -rf /lib/systemd/system/bxc-node.service /opt/bcloud/nodeapi/node
 }
 bxc-network_ins(){
-    ret_4=`apt list libcurl4 2>/dev/null|grep -q installed;echo $?`
+    ret_4=$(apt list libcurl4 2>/dev/null|grep -q installed;echo $?)
     if [[ ${ret_4} -eq 0 ]]; then
         log "[info]" "Install libcurl4 library bxc-network"
         down "img-modules/bxc-network_x86_64" "${BASE_DIR}/bxc-network"
         chmod +x ${BASE_DIR}/bxc-network
     fi
-    ret_3=`apt list libcurl3 2>/dev/null|grep -q installed;echo $?`
+    ret_3=$(apt list libcurl3 2>/dev/null|grep -q installed;echo $?)
     if [[ ${ret_3} -eq 0 ]]; then
         log "[info]" "Install libcurl3 library bxc-network"
         down "img-modules/5.0.0-aml-N1-BonusCloud/bxc-network_x86_64" "${BASE_DIR}/bxc-network"
@@ -418,22 +416,22 @@ bxc-network_run(){
 
     ${BASE_DIR}/bxc-network
     sleep 3
-    ret=`ip link show tun0 >/dev/null;echo $?`
+    ret=$(ip link show tun0 >/dev/null;echo $?)
     if [[ ${ret} -ne 0 ]]; then
         log "[error]" "tun0 interface not found,try start "
         ${BASE_DIR}/bxc-network
         sleep 3 
-        ret=`ip link show tun0 >/dev/null;echo $?`
+        ret=$(ip link show tun0 >/dev/null;echo $?)
         if [[ ${ret} -ne 0 ]]; then
-            log "[error]" "bxc-network start fail ,error info :`${BASE_DIR}/bxc-network`"
+            log "[error]" "bxc-network start fail ,error info :$(${BASE_DIR}/bxc-network)"
         fi
     else
         log "[info]" "bxc-network start success"
     fi
 }
 goproxy_ins(){
-    which proxy >/dev/null
-    if [[ $? -ne 0 ]]; then
+    
+    if ! which proxy >/dev/null ; then
         LAST_VERSION=$(curl --silent "https://api.github.com/repos/snail007/goproxy/releases/latest" | grep -Po '"tag_name": "\K.*?(?=")')
         [ ! -s ${TMP}/proxy-linux-amd64.tar.gz ] &&wget "https://github.com/snail007/goproxy/releases/download/${LAST_VERSION}/proxy-linux-amd64.tar.gz" -O ${TMP}/proxy-linux-amd64.tar.gz
         mkdir -p ${TMP}/goproxy/
@@ -480,23 +478,24 @@ goproxy_remove(){
     rm -rf /usr/bin/proxy /etc/goproxy /var/log/goproxy 2>/dev/null
 }
 goproxy_check(){
-    ps -aux|grep -v grep|grep -q "proxy "
-    if [[ $? -ne 0 ]]; then
+    if ! pgrep "proxy" >/dev/null ; then
         log "[error]" "goproxy not runing"
     fi
-    ret_s=`curl -x 'socks5://localhost:8902' https://www.baidu.com -o /dev/null 2>/dev/null;echo $?`
-    ret_h=`curl -x "localhost:8901" https://www.baidu.com -o /dev/null 2>/dev/null;echo $?`
+    ret_s=$(curl -x 'socks5://localhost:8902' https://www.baidu.com -o /dev/null 2>/dev/null;echo $?)
+    ret_h=$(curl -x "localhost:8901" https://www.baidu.com -o /dev/null 2>/dev/null;echo $?)
     if [[ ${ret_s} -ne 0 ]]; then
          log "[error]" "goproxy socks not run!"
+         return 1
     fi
     if [[ ${ret_h} -ne 0 ]]; then
         log "[error]" "goproxy http not run!"
+        return 2
     fi
 }
 
 ins_salt(){
-    which salt-minion>/dev/null
-    if [[ $? -ne 0 ]] ;then
+    
+    if ! which salt-minion>/dev/null  ;then
         curl -fSL https://bootstrap.saltstack.com |bash -s -P stable 2019.2.0
     fi
     if [[ "${DEVMODEL}" == '' ]]; then
@@ -522,7 +521,7 @@ ins_salt_check(){
     echo "If not, the program has problems, you need to solve all the problems you encounter  "
     echo "您是否愿意安装salt-minion ，供开发人员远程调试."
     echo "如果否，程序出了问题，您需要自己解决所有遇到的问题，默认YES"
-    read -p "[Default YES/N]:" choose
+    read -r -p "[Default YES/N]:" choose
     case $choose in
         N|n|no|NO ) return ;;
         * ) ins_salt ;;
@@ -530,13 +529,13 @@ ins_salt_check(){
 }
 bound(){
     [ -s ${NODE_INFO} ]&&log "[info]" "${NODE_INFO} exits ,skip" && return 0
-    read -p "Input bcode:" bcode
-    read -p "Input email:" email
+    read -r -p "Input bcode:" bcode
+    read -r -p "Input email:" email
     if [[ -z "${bcode}" ]] || [[ -z "${email}" ]]; then
         echo "Please Input bcode and email. You can try \"bash $0 -b\" to bound"
         return 1
     fi
-    replacebcode=`echo "${bcode}"|egrep -o "[0-9a-f]{4}-[0-9a-f]{8}-([0-9a-f]{4}-){2}[0-9a-f]{4}-[0-9a-f]{12}"`
+    replacebcode=$(echo "${bcode}"|grep -E -o "[0-9a-f]{4}-[0-9a-f]{8}-([0-9a-f]{4}-){2}[0-9a-f]{4}-[0-9a-f]{12}")
     if [[ -n "${replacebcode}" ]]; then
         echo "bcode:${replacebcode}  email:${email}"
         curl -H "Content-Type: application/json" -d "{\"bcode\":\"${replacebcode}\",\"email\":\"${email}\"}" http://localhost:9017/bound
@@ -552,7 +551,7 @@ only_ins_network(){
     [ ! -s ${BASE_DIR}/nodeapi/node ]&&node_ins
     goproxy_ins
     goproxy_check
-    read "Do you want bound now ?[Y/N]:" choose
+    read -r -p "Do you want bound now ?[Y/N]:" choose
     case ${choose} in
         n|N ) return ;;
         y|Y ) bound&&node_remove ;;
@@ -564,7 +563,7 @@ _select_interface(){
     if [[  -n $0 ]]; then
         SET_LINK=$1
     fi
-    MACADDR=$(ip link show ${SET_LINK}|grep 'ether'|awk '{print $2}')
+    MACADDR=$(ip link show "${SET_LINK}"|grep 'ether'|awk '{print $2}')
     if [[ -z "${MACADDR}" ]]; then
         log "[error]" "Get interface ${SET_LINK} mac address get error"
         SET_LINK=""
@@ -573,7 +572,7 @@ _select_interface(){
 set_interfaces_name(){
     echo -e "手动修改网卡名称为ethx方法 https://jianpengzhang.github.io/2017/04/18/2017041801/"
 
-    read -p "是否自动修改网卡名称为ethx,可能会失联,默认否 yes/n:" CHOSE
+    read -r -p "是否自动修改网卡名称为ethx,可能会失联,默认否 yes/n:" CHOSE
     case ${CHOSE} in
         yes )
             sed -i 's/^GRUB_CMDLINE_LINUX=/#GRUB_CMDLINE_LINUX=/' /etc/default/grub
@@ -590,6 +589,50 @@ set_interfaces_name(){
     esac
     
 }
+mg(){
+    echoins(){
+        case $1 in
+            "1" ) echoerr "not install\t" ;;
+            "0" ) echoinfo "installed\t";;
+        esac
+    }
+    echorun(){
+        case $1 in
+            "1" ) echoerr "not running\t" ;;
+            "0" ) echoinfo "running\t\t";;
+        esac
+    }
+    network_progress_exits=$(pgrep bxc-network>/dev/null;echo $?)
+    tun0exits=$(ip link show tun0 >/dev/null 2>&1 ;echo $?)
+    network_file_exits=$([ -s ${BASE_DIR}/bxc-network ];echo $?)
+    node_progress_exits=$(pgrep  node>/dev/null;echo $?)
+    node_file_exits=$([ -s ${BASE_DIR}/nodeapi/node ];echo $?)
+    [ "${node_progress_exits}" -eq 0 ]&&node_version=$(curl -fsS localhost:9017/version|grep -E -o 'v[0-9]\.[0-9]\.[0-9]')
+    check_k8s
+    k8s_file_exits=$?
+    k8s_progress_exits=$(pgrep kubelet>/dev/null;echo $?)
+    goproxy_progress=$(curl -x "127.0.0.1:8901" https://www.baidu.com -o /dev/null 2>/dev/null;echo $?)
+
+    echowarn "\nbxc-network:\n"
+    echo -e -n "|install?\t|running?\t|connect?\t|proxy aleady?\n"
+    [ "${network_file_exits}" -ne 0 ]&&{ echoins "1";}||echoins "0"
+    [ "${network_progress_exits}" -ne 0 ]&&{ echorun "1";}||echorun "0"
+    [ "${tun0exits}" -ne 0 ] && { echoerr "tun0 not exiting\t";}  || echoinfo "tun0 exit!\t"
+    [ "${goproxy_progress}" -ne 0 ]&&{ echorun "1";}||echorun "0"
+    echowarn "\nbxc-node:\n"
+    echo -e -n "|install?\t|running?\t|version\n"
+    [ "${node_file_exits}" -ne 0 ]&&{ echoins "1";}||echoins "0"
+    [ "${node_progress_exits}" -ne 0 ]&&{ echorun "1";}||echorun "0"
+    [ "${node_progress_exits}" -eq 0 ]&&echoinfo "${node_version}"
+    echowarn "\nk8s:\n"
+    [ "${k8s_file_exits}" -ne 0 ]&&{ echoins "1";}||echoins "0"
+    [ "${k8s_progress_exits}" -ne 0 ]&&{ echorun "1";}||echorun "0"
+    echowarn "\ndocker:\n"
+    check_doc
+    [ $? -ne 0 ]&& { echoins "1";}||echoins "0"
+
+    echoinfo "\n"
+}
 verifty(){
     [ ! -s $BASE_DIR/nodeapi/node ] && return 2
     [ ! -s $BASE_DIR/compute/10-mynet.conflist ] && return 3
@@ -598,7 +641,7 @@ verifty(){
     return 0 
 }
 remove(){
-    read -p "Are you sure all remove BonusCloud plugin? yes/n:" CHOSE
+    read -r -p "Are you sure all remove BonusCloud plugin? yes/n:" CHOSE
     case $CHOSE in
         yes )
             systemctl disable bxc-node
@@ -614,7 +657,7 @@ remove(){
 
 }
 displayhelp(){
-    echo -e "\f"
+    echo -e "\033[2J"
     echo "bash $0 [option]" 
     echo -e "    -h             Print this and exit"
     echo -e "    -i             Installation environment check and initialization"
@@ -631,7 +674,7 @@ displayhelp(){
     echo -e "    -S             Don'n show Info level output "
     exit 0
 }
-while  getopts "bdiknrsceghI:TS" opt ; do
+while  getopts "bdiknrsceghI:tTS" opt ; do
     case $opt in
         i ) action="init" ;;
         b ) bound ;exit 0;;
@@ -644,8 +687,9 @@ while  getopts "bdiknrsceghI:TS" opt ; do
         e ) action="set_ethx" ;;
         g ) action="only_net" ;;
         h ) displayhelp ;;
+        t ) mg ;exit 0 ;;
         T ) bxc-network_ins;exit 0 ;;
-        I ) _select_interface ${OPTARG} ;;
+        I ) _select_interface "${OPTARG}" ;;
         S ) DISPLAYINFO="0" ;;
         ? ) echoerr "Unknow arg. exiting" ;displayhelp; exit 1 ;;
     esac
@@ -671,7 +715,7 @@ case $action in
         ins_conf
         node_ins
         ins_salt_check
-        res=`verifty;echo $?` 
+        res=$(verifty;echo $?) 
         if [[ ${res} -ne 0 ]] ; then
             log "[error]" "verifty error $res,install fail"
         else
