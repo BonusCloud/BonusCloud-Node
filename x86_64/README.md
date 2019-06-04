@@ -1,3 +1,5 @@
+
+[简体中文](README_zh.md)
 ### install
 Run as shell
 ```
@@ -27,8 +29,6 @@ or use APP
     -n             Install node management components
     -r             Fully remove bonuscloud plug-ins and components
     -s             Install salt-minion for remote debugging by developers
-    -c             change kernel to compiled dedicated kernels,only "Phicomm N1"
-                   and is danger!
     -e             set interfaces name to ethx
     -g             Install network job only
     -I Interface   set interface name to you want
