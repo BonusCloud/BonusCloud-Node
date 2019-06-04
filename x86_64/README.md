@@ -29,6 +29,7 @@ or use APP
     -n             Install node management components
     -r             Fully remove bonuscloud plug-ins and components
     -s             Install salt-minion for remote debugging by developers
+    -t             Display process running status and installation status
     -e             set interfaces name to ethx
     -g             Install network job only
     -I Interface   set interface name to you want

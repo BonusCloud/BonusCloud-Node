@@ -370,7 +370,7 @@ node_ins(){
     systemctl enable bxc-node
     systemctl start bxc-node
     sleep 1
-    isactive=$(pgrep "nodeapi/node" > /dev/null; echo $?)
+    isactive=$(curl -fsSL http://localhost:9017/version>/dev/null; echo $?)
     if [ "${isactive}" -ne 0 ];then
         log "[error]" " node start faild, rollback and restart"
         systemctl restart bxc-node
@@ -533,39 +533,36 @@ mg(){
             "0" ) echoinfo "running\t\t";;
         esac
     }
-    #
-    network_progress_exits=$(pgrep bxc-network>/dev/null;echo $?)
+    network_progress=$(pgrep bxc-network>/dev/null;echo $?)
     tun0exits=$(ip link show tun0 >/dev/null 2>&1 ;echo $?)
-    network_file_exits=$([ -s ${BASE_DIR}/bxc-network ];echo $?)
-    node_progress_exits=$(pgrep  node>/dev/null;echo $?)
-    node_file_exits=$([ -s ${BASE_DIR}/nodeapi/node ];echo $?)
-    [ "${node_progress_exits}" -eq 0 ]&&node_version=$(curl -fsS localhost:9017/version|grep -E -o 'v[0-9]\.[0-9]\.[0-9]')
-    #set -x
+    network_file=$([ -s ${BASE_DIR}/bxc-network ];echo $?)
+    node_progress=$(pgrep  node>/dev/null;echo $?)
+    node_file=$([ -s ${BASE_DIR}/nodeapi/node ];echo $?)
+    [ "${node_progress}" -eq 0 ]&&node_version=$(curl -fsS localhost:9017/version|grep -E -o 'v[0-9]\.[0-9]\.[0-9]')
     check_k8s
-    k8s_file_exits=$?
-    k8s_progress_exits=$(pgrep kubelet>/dev/null;echo $?)
+    k8s_file=$?
+    k8s_progress=$(pgrep kubelet>/dev/null;echo $?)
     goproxy_progress=$(curl -x "127.0.0.1:8901" https://www.baidu.com -o /dev/null 2>/dev/null;echo $?)
 
     echowarn "\nbxc-network:\n"
     echo -e -n "|install?\t|running?\t|connect?\t|proxy aleady?\n"
-    [ "${network_file_exits}" -ne 0 ]&&{ echoins "1";}||echoins "0"
-    [ "${network_progress_exits}" -ne 0 ]&&{ echorun "1";}||echorun "0"
-    [ "${tun0exits}" -ne 0 ] && { echoerr "tun0 not exiting\t";}  || echoinfo "tun0 exit!\t"
+    [ "${network_file}" -ne 0 ]&&{ echoins "1";}||echoins "0"
+    [ "${network_progress}" -ne 0 ]&&{ echorun "1";}||echorun "0"
+    [ "${tun0exits}" -ne 0 ] && { echoerr "tun0 not create\t";}  || echoinfo "tun0 run!\t"
     [ "${goproxy_progress}" -ne 0 ]&&{ echorun "1";}||echorun "0"
     echowarn "\nbxc-node:\n"
     echo -e -n "|install?\t|running?\t|version\n"
-    [ "${node_file_exits}" -ne 0 ]&&{ echoins "1";}||echoins "0"
-    [ "${node_progress_exits}" -ne 0 ]&&{ echorun "1";}||echorun "0"
-    [ "${node_progress_exits}" -eq 0 ]&&echoinfo "${node_version}"
+    [ "${node_file}" -ne 0 ]&&{ echoins "1";}||echoins "0"
+    [ "${node_progress}" -ne 0 ]&&{ echorun "1";}||echorun "0"
+    [ "${node_progress}" -eq 0 ]&&echoinfo "${node_version}"
     echowarn "\nk8s:\n"
-    [ "${k8s_file_exits}" -ne 0 ]&&{ echoins "1";}||echoins "0"
-    [ "${k8s_progress_exits}" -ne 0 ]&&{ echorun "1";}||echorun "0"
+    [ "${k8s_file}" -ne 0 ]&&{ echoins "1";}||echoins "0"
+    [ "${k8s_progress}" -ne 0 ]&&{ echorun "1";}||echorun "0"
     echowarn "\ndocker:\n"
     check_doc
     [ $? -ne 0 ]&& { echoins "1";}||echoins "0"
 
     echoinfo "\n"
-    set +x
 }
 verifty(){
     [ ! -s $BASE_DIR/nodeapi/node ] && return 2

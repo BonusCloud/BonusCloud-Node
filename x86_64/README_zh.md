@@ -26,6 +26,7 @@ curl -H "Content-Type: application/json" -d '{"bcode":"xxxx-xxxxxxxx","email":"x
     -n             安装node管理程序(绑定等操作需要用)
     -r             重置k8s并删除所有已安装程序
     -s             安装salt-minion管理程序
+    -t             显示进程安装运行情况
     -e             设置网络接口名称为ethx格式
     -g             仅安装网络任务程序
     -I Interface   指定网卡
