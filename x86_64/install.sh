@@ -23,7 +23,7 @@ LOG_FILE="ins.log"
 
 K8S_LOW="1.12.3"
 DOC_LOW="1.11.1"
-DOC_HIG="18.06.3"
+DOC_HIG="18.06.4"
 
 support_os=(
     centos
@@ -118,19 +118,19 @@ down(){
     return 1
 }
 function version_ge() { test "$(echo "$@" | tr " " "\n" | sort -rV | head -n 1)" == "$1"; }
-function version_le() { test "$(echo "$@" | tr " " "\n" | sort -V | head -n 1)" == "$1"; }
+function version_le() { test "$(echo "$@" | tr " " "\n" | sort -V  | head -n 1)" == "$1"; }
 check_doc(){
     retd=$(which docker>/dev/null;echo $?)
     if [ "${retd}" -ne 0 ]; then
         log "[info]" "docker not found"
         return 1
     fi
-    doc_v=$(docker version |grep Version|grep -o '[0-9\.]*'|sed -n '2p')
+    doc_v=$(docker version --format "{{.Server.Version}}")
     if version_ge "${doc_v}" "${DOC_LOW}" && version_le "${doc_v}" "${DOC_HIG}" ; then
-        log "[info]" "docker version above ${DOC_LOW} and below ${DOC_HIG}"
+        log "[info]" "dockerd version ${doc_v} above ${DOC_LOW} and below ${DOC_HIG}"
         return 0
     else
-        log "[info]" "docker version fail"
+        log "[info]" "docker version ${doc_v} fail"
         return 1
     fi
 }
@@ -142,7 +142,7 @@ check_k8s(){
         log "[info]" "k8s not found"
         return 1
     else 
-        k8s_adm=$(kubeadm version|grep -o '\"v[0-9\.]*\"'|grep -o '[0-9\.]*')
+        k8s_adm=$(kubeadm version -o short|grep -o '[0-9\.]*')
         k8s_let=$(kubelet --version|grep -o '[0-9\.]*')
         k8s_ctl=$(kubectl  version --short --client|grep -o '[0-9\.]*')
         if version_ge "${k8s_adm}" "${K8S_LOW}" ; then
@@ -300,7 +300,7 @@ EOF
 }
 k8s_remove(){
     kubeadm reset -f
-    ${PG} remove -y kubelet kubeadm kubectl kubernetes-cni
+    ${PG} remove -y kubelet kubectl kubeadm --allow-change-held-packages
     rm -rf /etc/sysctl.d/k8s.conf
 }
 ins_conf(){
@@ -528,34 +528,65 @@ ins_salt_check(){
     esac
 }
 bound(){
-    [ -s ${NODE_INFO} ]&&log "[info]" "${NODE_INFO} exits ,skip" && return 0
-    read -r -p "Input bcode:" bcode
-    read -r -p "Input email:" email
+    [ -s /opt/bcloud/node.db ]&&log "[info]" "${NODE_INFO} exits ,skip" && return 0
+    echoinfo "Input bcode:";read -r  bcode
+    echoinfo "Input email:";read -r  email
     if [[ -z "${bcode}" ]] || [[ -z "${email}" ]]; then
-        echo "Please Input bcode and email. You can try \"bash $0 -b\" to bound"
+        echowarn "Please Input bcode and email. You can try \"bash $0 -b\" to bound\n"
         return 1
     fi
     replacebcode=$(echo "${bcode}"|grep -E -o "[0-9a-f]{4}-[0-9a-f]{8}-([0-9a-f]{4}-){2}[0-9a-f]{4}-[0-9a-f]{12}")
     if [[ -n "${replacebcode}" ]]; then
-        echo "bcode:${replacebcode}  email:${email}"
+        echoinfo "bcode:${replacebcode}  email:${email}\n"
         curl -H "Content-Type: application/json" -d "{\"bcode\":\"${replacebcode}\",\"email\":\"${email}\"}" http://localhost:9017/bound
-        
+        if [[ $? -ne 0 ]]; then
+            log "[error]" "bound failed"
+        fi
     else
-        echo "Please input verifty you bcode!You can try \"bash $0 -b\" to bound"
+        echoerr "Please input verifty you bcode!You can try \"bash $0 -b\" to bound\n"
         return 1
     fi
 }
-only_ins_network(){
+only_ins_network_base(){
     init 
     [ ! -s ${BASE_DIR}/bxc-network ]&&bxc-network_ins
     [ ! -s ${BASE_DIR}/nodeapi/node ]&&node_ins
     goproxy_ins
     goproxy_check
-    read -r -p "Do you want bound now ?[Y/N]:" choose
+    echoinfo "bound now?(现在绑定?)[Y/N]:";read -r choose
     case ${choose} in
         n|N ) return ;;
         y|Y ) bound&&node_remove ;;
         * ) bound&&node_remove ;;
+    esac
+}
+only_ins_network_docker(){
+    env_check
+    ins_docker
+    docker pull registry.cn-hangzhou.aliyuncs.com/bonus/bxc-network-x86_64:v1
+    docker pull registry.cn-beijing.aliyuncs.com/bxc_public/goproxy:amd64-v1
+    if ! ip link show tun0 >/dev/null 2>&1 ; then
+        echoinfo "start bxc-network\n"
+        docker run -d --name=bxc-network --net=host --privileged --restart=always \
+        --device=/dev/net/tun:/dev/net/tun -v /opt/bcloud:/opt/bcloud \
+        registry.cn-hangzhou.aliyuncs.com/bonus/bxc-network-x86_64:v1 /bxc-network 
+    fi
+    if ! goproxy_check ; then
+        echoinfo "start proxy"
+        docker run -d --name proxy_socks --restart=always --net=host registry.cn-beijing.aliyuncs.com/bxc_public/goproxy:amd64-v1  /bin/sh -c "/proxy socks -t tcp -p [::@ip6]:8902"
+        docker run -d --name proxy_http --restart=always --net=host registry.cn-beijing.aliyuncs.com/bxc_public/goproxy:amd64-v1  /bin/sh -c "/proxy http -t tcp -p [::@ip6]:8901"
+    fi
+}
+only_ins_network_choose_plan(){
+    echoinfo "choose plan:\n"
+    echoinfo "\t1) run as base progress(只运行基础进程,兼容性差,内存占用低)\n"
+    echoinfo "\t2) run as docker (运行在docker里,兼容性好,内存占用高)\n"
+    echoinfo "CHOOSE [1|2]:"
+    read -r  CHOOSE
+    case $CHOOSE in
+        1 ) only_ins_network_base;;
+        2 ) only_ins_network_docker;;
+        * ) echowarn "\nno choose(未选择)\n";;
     esac
 }
 
@@ -604,18 +635,18 @@ mg(){
     }
     network_progress=$(pgrep bxc-network>/dev/null;echo $?)
     tun0exits=$(ip link show tun0 >/dev/null 2>&1 ;echo $?)
-    network_file=$([ -s ${BASE_DIR}/bxc-network ];echo $?)
+    network_docker=$(docker images --format "{{.Repository}}"|grep -q bxc-network;echo $?)
+    network_file_have=$([ -s ${BASE_DIR}/bxc-network ] || [ "${network_docker}" -eq 0 ];echo $?)
     node_progress=$(pgrep  node>/dev/null;echo $?)
     node_file=$([ -s ${BASE_DIR}/nodeapi/node ];echo $?)
     [ "${node_progress}" -eq 0 ]&&node_version=$(curl -fsS localhost:9017/version|grep -E -o 'v[0-9]\.[0-9]\.[0-9]')
-    check_k8s
-    k8s_file=$?
+    k8s_file=$(check_k8s;echo $?)
     k8s_progress=$(pgrep kubelet>/dev/null;echo $?)
     goproxy_progress=$(curl -x "127.0.0.1:8901" https://www.baidu.com -o /dev/null 2>/dev/null;echo $?)
 
     echowarn "\nbxc-network:\n"
     echo -e -n "|install?\t|running?\t|connect?\t|proxy aleady?\n"
-    [ "${network_file}" -ne 0 ]&&{ echoins "1";}||echoins "0"
+    [ "${network_file_have}" -ne 0 ]&&{ echoins "1";}||echoins "0"
     [ "${network_progress}" -ne 0 ]&&{ echorun "1";}||echorun "0"
     [ "${tun0exits}" -ne 0 ] && { echoerr "tun0 not create\t";}  || echoinfo "tun0 run!\t"
     [ "${goproxy_progress}" -ne 0 ]&&{ echorun "1";}||echorun "0"
@@ -630,7 +661,6 @@ mg(){
     echowarn "\ndocker:\n"
     check_doc
     [ $? -ne 0 ]&& { echoins "1";}||echoins "0"
-
     echoinfo "\n"
 }
 verifty(){
@@ -641,14 +671,13 @@ verifty(){
     return 0 
 }
 remove(){
-    read -r -p "Are you sure all remove BonusCloud plugin? yes/n:" CHOSE
+    echowarn "Are you sure all remove BonusCloud plugin? yes/n:" ;read -r CHOSE
     case $CHOSE in
         yes )
-            systemctl disable bxc-node
-            rm -rf /opt/bcloud /lib/systemd/system/bxc-node.service $TMP
+            node_remove
+            rm -rf /opt/bcloud  $TMP
             echoinfo "BonusCloud plugin removed"
-            
-            apt remove -y kubelet kubectl kubeadm
+            k8s_remove
             echoinfo "k8s removed"
             echoinfo "see you again!"
             ;;
@@ -703,7 +732,7 @@ case $action in
     salt     ) ins_salt ;;
     change_kn) ins_kernel ;;
     set_ethx ) set_interfaces_name ;;
-    only_net ) only_ins_network ;;
+    only_net ) only_ins_network_choose_plan;;
     k8s      )
         env_check
         ins_k8s
