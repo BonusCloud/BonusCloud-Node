@@ -67,16 +67,18 @@ log(){
 }
 env_check(){
     # Check if the system is x86_64
-    if [[ "$(uname -m |grep -qE 'x86_64';echo $?)" -ne 0 ]]; then
+    if ! uname -m |grep -qE 'x86_64'; then
         log "[error]" "this is 64 system install script for x86_64 ,if you's not ,please install correspond system"
         exit 1
     fi
     # Detection package manager
     ret_a=$(which apt >/dev/null;echo $?)
     ret_y=$(which yum >/dev/null;echo $?)
-    if [[ ${ret_a} -eq 0 ]]; then
+    if which apt >/dev/null ; then
+        echoinfo "Find apt\n"
         PG="apt"
-    elif [[ ${ret_y} -eq 0 ]]; then
+    elif which yum >/dev/null ; then
+        echoinfo "Find yum\n"
         PG="yum"
     else
         log "[error]" "\"apt\" or \"yum\" ,not found ,exit "
@@ -94,7 +96,7 @@ env_check(){
     # Check if the system supports
     [ ! -s $TMP/screenfetch ]&&wget  -nv -O $TMP/screenfetch "https://raw.githubusercontent.com/KittyKatt/screenFetch/master/screenfetch-dev" 
     chmod +x $TMP/screenfetch
-    OS=$($TMP/screenfetch -n |grep 'OS:'|awk '{print $3}'|tr 'A-Z' 'a-z')
+    OS=$($TMP/screenfetch -n |grep 'OS:'|awk '{print $3}'|tr '[:upper:]' '[:lower:]')
     if [[ -z "$OS" ]]; then
         read -r -p "The release version is not detected, please enter it manually,like \"ubuntu\"" OS
     fi
@@ -527,25 +529,33 @@ ins_salt_check(){
         * ) ins_salt ;;
     esac
 }
-bound(){
-    [ -s /opt/bcloud/node.db ]&&log "[info]" "${NODE_INFO} exits ,skip" && return 0
+read_bcode_input(){
     echoinfo "Input bcode:";read -r  bcode
     echoinfo "Input email:";read -r  email
     if [[ -z "${bcode}" ]] || [[ -z "${email}" ]]; then
         echowarn "Please Input bcode and email. You can try \"bash $0 -b\" to bound\n"
         return 1
     fi
-    replacebcode=$(echo "${bcode}"|grep -E -o "[0-9a-f]{4}-[0-9a-f]{8}-([0-9a-f]{4}-){2}[0-9a-f]{4}-[0-9a-f]{12}")
-    if [[ -n "${replacebcode}" ]]; then
-        echoinfo "bcode:${replacebcode}  email:${email}\n"
-        curl -H "Content-Type: application/json" -d "{\"bcode\":\"${replacebcode}\",\"email\":\"${email}\"}" http://localhost:9017/bound
-        if [[ $? -ne 0 ]]; then
-            log "[error]" "bound failed"
-        fi
-    else
-        echoerr "Please input verifty you bcode!You can try \"bash $0 -b\" to bound\n"
+    read_bcode=$(echo "${bcode}"|grep -E -o "[0-9a-f]{4}-[0-9a-f]{8}-([0-9a-f]{4}-){2}[0-9a-f]{4}-[0-9a-f]{12}")
+    if [[ -z "${read_bcode}" ]]; then
+        echoerr "bcode input error\n"
+        return 2
+    fi
+    return 0
+}
+bound(){
+    local bcode=""
+    local email=""
+    [ -s /opt/bcloud/node.db ]&&log "[info]" "${NODE_INFO} exits ,skip" && return 0
+    if read_bcode_input ; then
         return 1
     fi
+    echoinfo "bcode:${replacebcode}  email:${email}\n"
+    curl -H "Content-Type: application/json" -d "{\"bcode\":\"${replacebcode}\",\"email\":\"${email}\"}" http://localhost:9017/bound
+    if [[ $? -ne 0 ]]; then
+        log "[error]" "bound failed"
+    fi
+    return 0
 }
 only_ins_network_base(){
     init 
@@ -573,19 +583,46 @@ only_ins_network_docker(){
     fi
     if ! goproxy_check ; then
         echoinfo "start proxy"
-        docker run -d --name proxy_socks --restart=always --net=host registry.cn-beijing.aliyuncs.com/bxc_public/goproxy:amd64-v1  /bin/sh -c "/proxy socks -t tcp -p [::@ip6]:8902"
-        docker run -d --name proxy_http --restart=always --net=host registry.cn-beijing.aliyuncs.com/bxc_public/goproxy:amd64-v1  /bin/sh -c "/proxy http -t tcp -p [::@ip6]:8901"
+        docker run -d --name proxy_socks --restart=always --net=host registry.cn-beijing.aliyuncs.com/bxc_public/goproxy:amd64-v1  /bin/sh -c "/proxy socks -t tcp -p [::]:8902"
+        docker run -d --name proxy_http  --restart=always --net=host registry.cn-beijing.aliyuncs.com/bxc_public/goproxy:amd64-v1  /bin/sh -c "/proxy http -t tcp -p [::]:8901"
     fi
+}
+only_ins_network_docker_openwrt(){
+    env_check
+    ins_docker
+    docker pull qinghon/bxc-op:18.06.2
+    docker tag qinghon/bxc-op:18.06.2 bxc-op:18.06.2
+    if ! docker images --format "{{.Repository}}"|grep -q bxc-op ; then
+        echoerr "pull failed,exit!"
+        return 1
+    fi
+    local bcode=""
+    local email=""
+    if ! read_bcode_input ; then
+        echoerr "read bcode or email failed,can't run! exit!"
+        return 2
+    fi
+    bxc_network_bridge_id=$(docker network ls -f name=bxc --format "{{.ID}}:{{.Name}}"|grep bxc|awk -F: '{print $1}')
+    if [[ -z "${bxc_network_bridge_id}" ]]; then
+        docker network create  bxc
+    fi
+    docker run -d --cap-add=NET_ADMIN --net=bxc --device /dev/net/tun --restart=always \
+    --sysctl net.ipv6.conf.all.disable_ipv6=0 \
+    -e bcode="${bcode}" -e email="${email}" --name=bxc-network-"${bcode}" \
+    -v bxc_data_"${bcode}":/opt/bcloud \
+    bxc-op:18.06.2
 }
 only_ins_network_choose_plan(){
     echoinfo "choose plan:\n"
     echoinfo "\t1) run as base progress(只运行基础进程,兼容性差,内存占用低)\n"
     echoinfo "\t2) run as docker (运行在docker里,兼容性好,内存占用高)\n"
-    echoinfo "CHOOSE [1|2]:"
+    echoinfo "\t3) run openwrt as docker (运行一个定制镜像在docker,内存比2小,稳定2好)"
+    echoinfo "CHOOSE [1|2|3]:"
     read -r  CHOOSE
     case $CHOOSE in
         1 ) only_ins_network_base;;
         2 ) only_ins_network_docker;;
+        3 ) only_ins_network_docker_openwrt ;;
         * ) echowarn "\nno choose(未选择)\n";;
     esac
 }
@@ -703,7 +740,7 @@ displayhelp(){
     echo -e "    -S             Don'n show Info level output "
     exit 0
 }
-while  getopts "bdiknrsceghI:tTS" opt ; do
+while  getopts "bdiknrstceghI:TS" opt ; do
     case $opt in
         i ) action="init" ;;
         b ) bound ;exit 0;;

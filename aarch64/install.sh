@@ -57,7 +57,7 @@ log(){
             ;;
         "[info]" )
             echo "${timeOut} $1 $2" >>$LOG_FILE
-            [[ "${DISPLAYINFO}" == "1"x ]]&&echoinfo "${timeOut} $1 $2\n"
+            [[ "${DISPLAYINFO}" == "1" ]]&&echoinfo "${timeOut} $1 $2\n"
             ;;
         "[warn]" )
             echo "${timeOut} $1 $2" >>$LOG_FILE
@@ -67,7 +67,7 @@ log(){
 }
 env_check(){
     # Check if the system is arm64
-    if [[ "`uname -m |grep -qE 'aarch64';echo $?`" -ne 0 ]]; then
+    if ! uname -m |grep -qE 'aarch64' ; then
         log "[error]" "this is 64 system install script for arm64 ,if you's not ,please install correspond system"
         exit 1
     fi
