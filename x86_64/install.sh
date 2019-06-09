@@ -570,23 +570,6 @@ only_ins_network_base(){
         * ) bound&&node_remove ;;
     esac
 }
-only_ins_network_docker(){
-    env_check
-    ins_docker
-    docker pull registry.cn-hangzhou.aliyuncs.com/bonus/bxc-network-x86_64:v1
-    docker pull registry.cn-beijing.aliyuncs.com/bxc_public/goproxy:amd64-v1
-    if ! ip link show tun0 >/dev/null 2>&1 ; then
-        echoinfo "start bxc-network\n"
-        docker run -d --name=bxc-network --net=host --privileged --restart=always \
-        --device=/dev/net/tun:/dev/net/tun -v /opt/bcloud:/opt/bcloud \
-        registry.cn-hangzhou.aliyuncs.com/bonus/bxc-network-x86_64:v1 /bxc-network 
-    fi
-    if ! goproxy_check ; then
-        echoinfo "start proxy"
-        docker run -d --name proxy_socks --restart=always --net=host registry.cn-beijing.aliyuncs.com/bxc_public/goproxy:amd64-v1  /bin/sh -c "/proxy socks -t tcp -p [::]:8902"
-        docker run -d --name proxy_http  --restart=always --net=host registry.cn-beijing.aliyuncs.com/bxc_public/goproxy:amd64-v1  /bin/sh -c "/proxy http -t tcp -p [::]:8901"
-    fi
-}
 only_ins_network_docker_openwrt(){
     env_check
     ins_docker
@@ -615,14 +598,12 @@ only_ins_network_docker_openwrt(){
 only_ins_network_choose_plan(){
     echoinfo "choose plan:\n"
     echoinfo "\t1) run as base progress(只运行基础进程,兼容性差,内存占用低)\n"
-    echoinfo "\t2) run as docker (运行在docker里,兼容性好,内存占用高)\n"
-    echoinfo "\t3) run openwrt as docker (运行一个定制镜像在docker,内存比2小,稳定2好)"
-    echoinfo "CHOOSE [1|2|3]:"
+    echoinfo "\t2) run openwrt as docker (运行在docker里,兼容性好,内存占用高)\n"
+    echoinfo "CHOOSE [1|2]:"
     read -r  CHOOSE
     case $CHOOSE in
         1 ) only_ins_network_base;;
-        2 ) only_ins_network_docker;;
-        3 ) only_ins_network_docker_openwrt ;;
+        2 ) only_ins_network_docker_openwrt ;;
         * ) echowarn "\nno choose(未选择)\n";;
     esac
 }
