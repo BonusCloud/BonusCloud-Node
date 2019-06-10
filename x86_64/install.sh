@@ -13,7 +13,7 @@ SSL_CRT="$BASE_DIR/client.crt"
 SSL_KEY="$BASE_DIR/client.key"
 VERSION_FILE="$BASE_DIR/VERSION"
 DEVMODEL=$(cat /proc/device-tree/model 2>/dev/null |tr -d '\0')
-DEFAULT_LINK=$(ip route list|grep 'default'|awk '{print $5}')
+DEFAULT_LINK=$(ip route list|grep 'default'|head -n 1|awk '{print $5}')
 DEFAULT_MACADDR=$(ip link show "${DEFAULT_LINK}"|grep 'ether'|awk '{print $2}')
 SET_LINK=""
 MACADDR=""
@@ -133,7 +133,7 @@ check_doc(){
         return 0
     else
         log "[info]" "docker version ${doc_v} fail"
-        return 1
+        return 2
     fi
 }
 check_k8s(){
@@ -184,10 +184,12 @@ check_info(){
     fi
 }
 ins_docker(){
-    if  check_doc ; then
+    ret=$(check_doc)
+    if [[ $(ret) -eq 0 || ${ret} -eq 2 ]]   ; then
         log "[info]" "docker was found! skiped"
         return 0
     fi
+    env_check
     if [[ "$PG" == "apt" ]]; then
         # Install docker with APT
         curl -fsSL "https://download.docker.com/linux/$OS/gpg" | apt-key add -
@@ -547,14 +549,16 @@ bound(){
     local bcode=""
     local email=""
     [ -s /opt/bcloud/node.db ]&&log "[info]" "${NODE_INFO} exits ,skip" && return 0
-    if read_bcode_input ; then
+    if ! read_bcode_input ; then 
         return 1
     fi
-    echoinfo "bcode:${replacebcode}  email:${email}\n"
-    curl -H "Content-Type: application/json" -d "{\"bcode\":\"${replacebcode}\",\"email\":\"${email}\"}" http://localhost:9017/bound
+    echoinfo "bcode:${bcode}  email:${email}\n"
+    curl -H "Content-Type: application/json" -d "{\"bcode\":\"${bcode}\",\"email\":\"${email}\"}" http://localhost:9017/bound
     if [[ $? -ne 0 ]]; then
         log "[error]" "bound failed"
+        return 1
     fi
+    # printf "\ncurl -H \"Content-Type: application/json\" -d \"{\"bcode\":\"${bcode}\",\"email\":\"${email}\"}\" http://localhost:9017/bound\n"
     return 0
 }
 only_ins_network_base(){
@@ -566,14 +570,13 @@ only_ins_network_base(){
     echoinfo "bound now?(现在绑定?)[Y/N]:";read -r choose
     case ${choose} in
         n|N ) return ;;
-        y|Y ) bound&&node_remove ;;
-        * ) bound&&node_remove ;;
+        y|Y ) bound&&systemctl stop bxc-node ;;
+        * ) bound&&systemctl stop bxc-node ;;
     esac
 }
 only_ins_network_docker_openwrt(){
-    env_check
     ins_docker
-    docker pull qinghon/bxc-op:18.06.2
+    #docker pull qinghon/bxc-op:18.06.2
     docker tag qinghon/bxc-op:18.06.2 bxc-op:18.06.2
     if ! docker images --format "{{.Repository}}"|grep -q bxc-op ; then
         echoerr "pull failed,exit!"
@@ -589,11 +592,25 @@ only_ins_network_docker_openwrt(){
     if [[ -z "${bxc_network_bridge_id}" ]]; then
         docker network create  bxc
     fi
-    docker run -d --cap-add=NET_ADMIN --net=bxc --device /dev/net/tun --restart=always \
-    --sysctl net.ipv6.conf.all.disable_ipv6=0 \
+    mac_addr=$(od /dev/urandom -w6 -tx1 -An|sed -e 's/ //' -e 's/ /:/g'|head -n 1)
+    echoinfo "Set mac address:";read -r -e -i "${mac_addr}" mac_addr
+    if [[ -z "${mac_addr}" ]]; then
+        mac_addr=$(od /dev/urandom -w6 -tx1 -An|sed -e 's/ //' -e 's/ /:/g'|head -n 1)
+        echoinfo "Generate a mac address: $mac_addr\n"
+    fi
+    con_id=$(docker run -d --cap-add=NET_ADMIN --net=bxc --device /dev/net/tun --restart=always \
+    --sysctl net.ipv6.conf.all.disable_ipv6=0 --mac-address="$mac_addr"\
     -e bcode="${bcode}" -e email="${email}" --name=bxc-network-"${bcode}" \
     -v bxc_data_"${bcode}":/opt/bcloud \
-    bxc-op:18.06.2
+    qinghon/bxc-op:18.06.2)
+    echo "${con_id}"
+    sleep 2
+    fail_log=$(docker logs "${con_id}" 2>&1 |grep 'bonud fail'|head -n 1)
+    if [[ -n "${fail_log}" ]]; then
+        echoerr "bound fail\n${fail_log}\n"
+        docker stop "${con_id}"
+        docker rm "${con_id}"
+    fi
 }
 only_ins_network_choose_plan(){
     echoinfo "choose plan:\n"
@@ -651,17 +668,32 @@ mg(){
             "0" ) echoinfo "running\t\t";;
         esac
     }
+    # network check
+    network_docker=$(docker images --format "{{.Repository}}"|grep -q bxc-op;echo $?)
+    network_file_have=$([ -s ${BASE_DIR}/bxc-network ] || [ "${network_docker}" -eq 0 ];echo $?)   
+    
     network_progress=$(pgrep bxc-network>/dev/null;echo $?)
+    [[ ${network_progress} -eq 0 ]] &&network_con_id=$(docker ps --filter="ancestor=bxc-op:18.06.2" --format "{{.ID}}"|head -n 1)
+    
     tun0exits=$(ip link show tun0 >/dev/null 2>&1 ;echo $?)
-    network_docker=$(docker images --format "{{.Repository}}"|grep -q bxc-network;echo $?)
-    network_file_have=$([ -s ${BASE_DIR}/bxc-network ] || [ "${network_docker}" -eq 0 ];echo $?)
+    [[ ${network_file_have} -eq 0 ]] &&tun0exits=$(ip link show tun0 >/dev/null 2>&1 ;echo $?)
+    [[ ${network_docker} -eq 0  && -n "${network_con_id}" ]] &&tun0exits=$(docker exec -i "${network_con_id}" /bin/sh -c "ip link show dev tun0>/dev/null;echo $?")
+    [[ $network_file_have -ne 0 && -z "${network_con_id}" ]] &&tun0exits=1
+
+    goproxy_progress=$(curl -x "127.0.0.1:8901" https://www.baidu.com -o /dev/null 2>/dev/null;echo $?)
+    [[ -n "${network_con_id}" ]] &&goproxy_progress=$(docker exec -i "${network_con_id}" /bin/sh -c "pgrep bxc-worker>/dev/null;echo $?")
+    # node check
     node_progress=$(pgrep  node>/dev/null;echo $?)
     node_file=$([ -s ${BASE_DIR}/nodeapi/node ];echo $?)
     [ "${node_progress}" -eq 0 ]&&node_version=$(curl -fsS localhost:9017/version|grep -E -o 'v[0-9]\.[0-9]\.[0-9]')
+    # k8s check
     k8s_file=$(check_k8s;echo $?)
     k8s_progress=$(pgrep kubelet>/dev/null;echo $?)
-    goproxy_progress=$(curl -x "127.0.0.1:8901" https://www.baidu.com -o /dev/null 2>/dev/null;echo $?)
+    
+    #docker check
+    doc_che_ret=$(check_doc)
 
+    #output
     echowarn "\nbxc-network:\n"
     echo -e -n "|install?\t|running?\t|connect?\t|proxy aleady?\n"
     [ "${network_file_have}" -ne 0 ]&&{ echoins "1";}||echoins "0"
@@ -677,8 +709,7 @@ mg(){
     [ "${k8s_file}" -ne 0 ]&&{ echoins "1";}||echoins "0"
     [ "${k8s_progress}" -ne 0 ]&&{ echorun "1";}||echorun "0"
     echowarn "\ndocker:\n"
-    check_doc
-    [ $? -ne 0 ]&& { echoins "1";}||echoins "0"
+    [[ ${doc_che_ret} -eq 1  ]] && { echoins "1";}||echoins "0"
     echoinfo "\n"
 }
 verifty(){
