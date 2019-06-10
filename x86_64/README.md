@@ -1,3 +1,5 @@
+
+[简体中文](README_zh.md)
 ### install
 Run as shell
 ```
@@ -18,3 +20,17 @@ curl -H "Content-Type: application/json" -d '{"bcode":"xxxx-xxxxxxxx","email":"x
 ```
 or use APP
 
+### help
+
+    -h             Print this and exit
+    -i             Installation environment check and initialization
+    -k             Install the k8s environment and the k8s components that
+                   BonusCloud depends on
+    -n             Install node management components
+    -r             Fully remove bonuscloud plug-ins and components
+    -s             Install salt-minion for remote debugging by developers
+    -t             Display process running status and installation status
+    -e             set interfaces name to ethx
+    -g             Install network job only
+    -I Interface   set interface name to you want
+    -S             Don'n show Info level output
