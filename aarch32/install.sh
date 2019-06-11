@@ -288,7 +288,7 @@ EOF
 ins_conf(){
     down "aarch32/res/compute/10-mynet.conflist" "$BASE_DIR/compute/10-mynet.conflist"
     down "aarch32/res/compute/99-loopback.conf" "$BASE_DIR/compute/99-loopback.conf"
-
+}
 _set_node_systemd(){
     if [[ -z "${SET_LINK}" ]]; then
         INSERT_STR="#--intf ${DEFAULT_LINK}"

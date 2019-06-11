@@ -574,25 +574,10 @@ only_ins_network_base(){
         * ) bound&&systemctl stop bxc-node ;;
     esac
 }
-only_ins_network_docker_openwrt(){
-    ins_docker
-    #docker pull qinghon/bxc-op:18.06.2
-    docker tag qinghon/bxc-op:18.06.2 bxc-op:18.06.2
-    if ! docker images --format "{{.Repository}}"|grep -q bxc-op ; then
-        echoerr "pull failed,exit!"
-        return 1
-    fi
-    local bcode=""
-    local email=""
-    if ! read_bcode_input ; then
-        echoerr "read bcode or email failed,can't run! exit!"
-        return 2
-    fi
-    bxc_network_bridge_id=$(docker network ls -f name=bxc --format "{{.ID}}:{{.Name}}"|grep bxc|awk -F: '{print $1}')
-    if [[ -z "${bxc_network_bridge_id}" ]]; then
-        docker network create  bxc
-    fi
-    mac_addr=$(od /dev/urandom -w6 -tx1 -An|sed -e 's/ //' -e 's/ /:/g'|head -n 1)
+only_ins_network_docker_run(){
+    bcode="$1"
+    email="$2"
+    mac_addr=$(od /dev/urandom -w6 -tx1 -An|sed -e 's/ //' -e 's/ /:/g'|head -n 1|grep -E -o '([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}')
     echoinfo "Set mac address:";read -r -e -i "${mac_addr}" mac_addr
     if [[ -z "${mac_addr}" ]]; then
         mac_addr=$(od /dev/urandom -w6 -tx1 -An|sed -e 's/ //' -e 's/ /:/g'|head -n 1)
@@ -600,7 +585,7 @@ only_ins_network_docker_openwrt(){
     fi
     con_id=$(docker run -d --cap-add=NET_ADMIN --net=bxc --device /dev/net/tun --restart=always \
     --sysctl net.ipv6.conf.all.disable_ipv6=0 --mac-address="$mac_addr"\
-    -e bcode="${bcode}" -e email="${email}" --name=bxc-network-"${bcode}" \
+    -e bcode="${bcode}" -e email="${email}" --name=bxc-"${bcode}" \
     -v bxc_data_"${bcode}":/opt/bcloud \
     qinghon/bxc-op:18.06.2)
     echo "${con_id}"
@@ -611,6 +596,64 @@ only_ins_network_docker_openwrt(){
         docker stop "${con_id}"
         docker rm "${con_id}"
     fi
+}
+_get_ip_mainland(){
+    geoip=$(curl -4 -fsSL "https://api.ip.sb/geoip")
+    country=$(echo "$geoip"|jq '.country')
+    if [[ "${country}" == "China" ]]; then
+        return 0
+    else
+        return 1
+    fi
+}
+only_ins_network_docker_openwrt(){
+    ins_docker
+    docker pull qinghon/bxc-op:18.06.2
+    docker tag qinghon/bxc-op:18.06.2 bxc-op:18.06.2
+    if ! docker images --format "{{.Repository}}"|grep -q bxc-op ; then
+        echoerr "pull failed,exit!"
+        return 1
+    fi
+    echoinfo "Input bcode:";read -r  bcode
+    echoinfo "Input email:";read -r  email
+    if [[ -z "${bcode}" ]] || [[ -z "${email}" ]]; then
+        echowarn "Please Input bcode and email. You can try \"bash $0 -b\" to bound\n"
+        return 1
+    fi
+    if [[ ${#bcode} -le 3 && ${bcode} -le 100 ]]; then
+        json=$(curl -fsSL "https://console.bonuscloud.io/api/bcode/getBcodeForOther/?email=${email}")
+        if ! _get_ip_mainland ; then
+            all_bcode_length=$(echo "${json}"|jq '.ret.mainland|length')
+            bcode_list=$(echo "${json}"|jq '.ret.mainland')
+        else
+            all_bcode_length=$(echo "${json}"|jq '.ret.non_mainland|length')
+            bcode_list=$(echo "${json}"|jq '.ret.non_mainland')
+        fi
+        
+        read_all_bcode=$(echo "${bcode_list}"|jq -r '.[]|.bcode')
+        if [[ $bcode -ge $all_bcode_length ]]; then
+            len=$all_bcode_length
+        else
+            len=$bcode
+        fi
+    else
+        read_bcode=$(echo "${bcode}"|grep -E -o "[0-9a-f]{4}-[0-9a-f]{8}-([0-9a-f]{4}-){2}[0-9a-f]{4}-[0-9a-f]{12}")
+        if [[ -z "${read_bcode}" ]]; then
+            echowarn "bcode input error\n"
+            return 2
+        else
+            read_all_bcode="${read_bcode}"
+            len=1
+        fi
+    fi
+    bxc_network_bridge_id=$(docker network ls -f name=bxc --format "{{.ID}}:{{.Name}}"|grep bxc|awk -F: '{print $1}')
+    if [[ -z "${bxc_network_bridge_id}" ]]; then
+        docker network create  bxc
+    fi
+    
+    for i in $(echo "${read_all_bcode}"|head -n "$len") ; do
+        only_ins_network_docker_run "${i}" "${email}"
+    done
 }
 only_ins_network_choose_plan(){
     echoinfo "choose plan:\n"

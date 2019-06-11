@@ -29,5 +29,6 @@ curl -H "Content-Type: application/json" -d '{"bcode":"xxxx-xxxxxxxx","email":"x
     -t             显示进程安装运行情况
     -e             设置网络接口名称为ethx格式
     -g             仅安装网络任务程序
+    -b             命令行绑定
     -I Interface   指定网卡
     -S             不显示Info等级日志
