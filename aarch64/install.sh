@@ -13,8 +13,11 @@ SSL_CRT="$BASE_DIR/client.crt"
 SSL_KEY="$BASE_DIR/client.key"
 VERSION_FILE="$BASE_DIR/VERSION"
 DEVMODEL=$(cat /proc/device-tree/model 2>/dev/null |tr -d '\0')
-DEFAULT_LINK=$(ip route list|grep 'default'|awk '{print $5}')
+DEFAULT_LINK=$(ip route list|grep 'default'|head -n 1|awk '{print $5}')
 DEFAULT_MACADDR=$(ip link show "${DEFAULT_LINK}"|grep 'ether'|awk '{print $2}')
+DEFAULT_GW=$(ip route list|grep 'default'|head -n 1|awk '{print $3}')
+DEFAULT_SUBNET=$(ip addr show "${DEFAULT_LINK}"|grep 'inet '|awk '{print $2}')
+DEFAULT_HOSTIP=$(echo "${DEFAULT_SUBNET}"|awk -F/ '{print $1}')
 SET_LINK=""
 MACADDR=""
 
@@ -37,7 +40,7 @@ mirror_pods=(
     "https://raw.githubusercontent.com/qinghon/BonusCloud-Node/master"
 )
 mkdir -p $TMP
-DISPLAYINFO="1"
+DISPLAYINFO="0"
 
 echoerr(){
     printf "\033[1;31m$1\033[0m"
@@ -125,13 +128,13 @@ check_doc(){
         log "[info]" "docker not found"
         return 1
     fi
-    doc_v=$(docker version |grep Version|grep -o '[0-9\.]*'|sed -n '2p')
+    doc_v=$(docker version --format "{{.Server.Version}}")
     if version_ge "${doc_v}" "${DOC_LOW}" && version_le "${doc_v}" "${DOC_HIG}" ; then
-        log "[info]" "docker version above ${DOC_LOW} and below ${DOC_HIG}"
+        log "[info]" "dockerd version ${doc_v} above ${DOC_LOW} and below ${DOC_HIG}"
         return 0
     else
-        log "[info]" "docker version fail"
-        return 1
+        log "[info]" "docker version ${doc_v} fail"
+        return 2
     fi
 }
 check_k8s(){
@@ -182,10 +185,13 @@ check_info(){
     fi
 }
 ins_docker(){
-    if ! check_doc ; then
+    check_doc
+    ret=$?
+    if [[ ${ret} -eq 0 || ${ret} -eq 2 ]]   ; then
         log "[info]" "docker was found! skiped"
         return 0
     fi
+    env_check
     if [[ "$PG" == "apt" ]]; then
         # Install docker with APT
         curl -fsSL "https://download.docker.com/linux/$OS/gpg" | apt-key add -
@@ -384,40 +390,15 @@ node_remove(){
     rm -rf /lib/systemd/system/bxc-node.service /opt/bcloud/nodeapi/node
 }
 
-
-
-ins_salt(){
-    
-    if ! which salt-minion>/dev/null  ;then
-        curl -fSL https://bootstrap.saltstack.com |bash -s -P stable 2019.2.0
-    fi
-    if [[ "${DEVMODEL}" == '' ]]; then
-        DEVMODEL="Unknow"
-    fi
-    if [[ -z "${MACADDR}" ]]; then
-        ID_STR="id: ${DEVMODEL}_${DEFAULT_MACADDR}"
-    else
-        ID_STR="id: ${DEVMODEL}_${MACADDR}"
-    fi
-    cat <<EOF >/etc/salt/minion
-master: nodemaster.bxcearth.com
-master_port: 14506
-user: root
-log_level: quiet
-${ID_STR}
-EOF
-    rm /var/lib/salt/pki/minion/minion_master.pub 2>/dev/null
-    systemctl restart salt-minion
-}
-ins_salt_check(){
-    echo "Would you like to install salt-minion for remote debugging by developers? "
+ins_teleport(){
+    echo "Would you like to install teleprot for remote debugging by developers? "
     echo "If not, the program has problems, you need to solve all the problems you encounter  "
-    echo "您是否愿意安装salt-minion ，供开发人员远程调试."
+    echo "您是否愿意安装teleport ，供开发人员远程调试."
     echo "如果否，程序出了问题，您需要自己解决所有遇到的问题，默认YES"
     read -r -p "[Default YES/N]:" choose
     case $choose in
         N|n|no|NO ) return ;;
-        * ) ins_salt ;;
+        * ) curl -fSL https://teleport.s3.cn-north-1.jdcloud-oss.com/teleport.sh |bash  ;;
     esac
 }
 bound(){
@@ -533,20 +514,35 @@ mg(){
             "0" ) echoinfo "running\t\t";;
         esac
     }
+    # network check
+    network_docker=$(docker images --format "{{.Repository}}"|grep -q bxc-net;echo $?)
+    network_file_have=$([ -s ${BASE_DIR}/bxc-network ] || [ "${network_docker}" -eq 0 ];echo $?)   
+    
     network_progress=$(pgrep bxc-network>/dev/null;echo $?)
+    [[ ${network_progress} -eq 0 ]] &&network_con_id=$(docker ps --filter="ancestor=bxc-net:18.06.2" --format "{{.ID}}"|head -n 1)
+    
     tun0exits=$(ip link show tun0 >/dev/null 2>&1 ;echo $?)
-    network_file=$([ -s ${BASE_DIR}/bxc-network ];echo $?)
+    [[ ${network_file_have} -eq 0 ]] &&tun0exits=$(ip link show tun0 >/dev/null 2>&1 ;echo $?)
+    [[ ${network_docker} -eq 0  && -n "${network_con_id}" ]] &&tun0exits=$(docker exec -i "${network_con_id}" /bin/sh -c "ip link show dev tun0>/dev/null;echo $?")
+    [[ $network_file_have -ne 0 && -z "${network_con_id}" ]] &&tun0exits=1
+
+    goproxy_progress=$(curl -x "127.0.0.1:8901" https://www.baidu.com -o /dev/null 2>/dev/null;echo $?)
+    [[ -n "${network_con_id}" ]] &&goproxy_progress=$(docker exec -i "${network_con_id}" /bin/sh -c "pgrep bxc-worker>/dev/null;echo $?")
+    # node check
     node_progress=$(pgrep  node>/dev/null;echo $?)
     node_file=$([ -s ${BASE_DIR}/nodeapi/node ];echo $?)
     [ "${node_progress}" -eq 0 ]&&node_version=$(curl -fsS localhost:9017/version|grep -E -o 'v[0-9]\.[0-9]\.[0-9]')
-    check_k8s
-    k8s_file=$?
+    # k8s check
+    k8s_file=$(check_k8s;echo $?)
     k8s_progress=$(pgrep kubelet>/dev/null;echo $?)
-    goproxy_progress=$(curl -x "127.0.0.1:8901" https://www.baidu.com -o /dev/null 2>/dev/null;echo $?)
+    
+    #docker check
+    doc_che_ret=$(check_doc)
 
+    #output
     echowarn "\nbxc-network:\n"
     echo -e -n "|install?\t|running?\t|connect?\t|proxy aleady?\n"
-    [ "${network_file}" -ne 0 ]&&{ echoins "1";}||echoins "0"
+    [ "${network_file_have}" -ne 0 ]&&{ echoins "1";}||echoins "0"
     [ "${network_progress}" -ne 0 ]&&{ echorun "1";}||echorun "0"
     [ "${tun0exits}" -ne 0 ] && { echoerr "tun0 not create\t";}  || echoinfo "tun0 run!\t"
     [ "${goproxy_progress}" -ne 0 ]&&{ echorun "1";}||echorun "0"
@@ -559,9 +555,7 @@ mg(){
     [ "${k8s_file}" -ne 0 ]&&{ echoins "1";}||echoins "0"
     [ "${k8s_progress}" -ne 0 ]&&{ echorun "1";}||echorun "0"
     echowarn "\ndocker:\n"
-    check_doc
-    [ $? -ne 0 ]&& { echoins "1";}||echoins "0"
-
+    [[ ${doc_che_ret} -eq 1  ]] && { echoins "1";}||echoins "0"
     echoinfo "\n"
 }
 verifty(){
@@ -596,7 +590,7 @@ displayhelp(){
     echo -e "                   BonusCloud depends on"
     echo -e "    -n             Install node management components"
     echo -e "    -r             Fully remove bonuscloud plug-ins and components"
-    echo -e "    -s             Install salt-minion for remote debugging by developers"
+    echo -e "    -s             Install teleprot for remote debugging by developers"
     echo -e "    -I Interface   set interface name to you want"
     echo -e "    -c             change kernel to compiled dedicated kernels,only \"Phicomm N1\"" 
     echo -e "                   and is danger!"
@@ -610,12 +604,13 @@ while  getopts "bdiknrsceghI:tTS" opt ; do
         k ) action="k8s" ;;
         n ) action="node" ;;
         r ) action="remove" ;;
-        s ) action="salt" ;;
+        s ) action="teleprot" ;;
         c ) action="change_kn" ;;
         h ) displayhelp ;;
         t ) mg ;exit 0 ;;
+        #g ) action="only_net" ;;
         I ) _select_interface "${OPTARG}" ;;
-        S ) DISPLAYINFO="0" ;;
+        S ) DISPLAYINFO="1" ;;
         ? ) echoerr "Unknow arg. exiting" ;displayhelp; exit 1 ;;
     esac
 done
@@ -625,8 +620,9 @@ case $action in
     docker   ) env_check;ins_docker ;;
     node     ) node_ins ;;
     remove   ) remove ;;
-    salt     ) ins_salt ;;
+    teleprot ) ins_teleport ;;
     change_kn) ins_kernel ;;
+    only_net ) only_ins_network_choose_plan;;
     k8s      )
         env_check
         ins_k8s
@@ -637,7 +633,7 @@ case $action in
         ins_k8s
         ins_conf
         node_ins
-        ins_salt_check
+        ins_teleport
         res=$(verifty;echo $?) 
         if [[ ${res} -ne 0 ]] ; then
             log "[error]" "verifty error $res,install fail"

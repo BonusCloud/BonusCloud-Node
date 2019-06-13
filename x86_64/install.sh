@@ -37,7 +37,7 @@ mirror_pods=(
     "https://raw.githubusercontent.com/qinghon/BonusCloud-Node/master"
 )
 mkdir -p $TMP
-DISPLAYINFO="1"
+DISPLAYINFO="0"
 
 echoerr(){
     printf "\033[1;31m$1\033[0m"
@@ -57,7 +57,7 @@ log(){
             ;;
         "[info]" )
             echo "${timeOut} $1 $2" >>$LOG_FILE
-            [[ "${DISPLAYINFO}" == "1"x ]]&&echoinfo "${timeOut} $1 $2\n"
+            [[ "${DISPLAYINFO}" == "1" ]]&&echoinfo "${timeOut} $1 $2\n"
             ;;
         "[warn]" )
             echo "${timeOut} $1 $2" >>$LOG_FILE
@@ -383,7 +383,7 @@ node_ins(){
 node_remove(){
     systemctl stop bxc-node
     systemctl disable bxc-node
-    rm -rf /lib/systemd/system/bxc-node.service /opt/bcloud/nodeapi/node
+    rm -rf /lib/systemd/system/bxc-node.service 
 }
 bxc-network_ins(){
     ret_4=$(apt list libcurl4 2>/dev/null|grep -q installed;echo $?)
@@ -496,39 +496,15 @@ goproxy_check(){
         return 2
     fi
 }
-
-ins_salt(){
-    
-    if ! which salt-minion>/dev/null  ;then
-        curl -fSL https://bootstrap.saltstack.com |bash -s -P stable 2019.2.0
-    fi
-    if [[ "${DEVMODEL}" == '' ]]; then
-        DEVMODEL="x86_64"
-    fi
-    if [[ -z "${MACADDR}" ]]; then
-        ID_STR="id: ${DEVMODEL}_${DEFAULT_MACADDR}"
-    else
-        ID_STR="id: ${DEVMODEL}_${MACADDR}"
-    fi
-    cat <<EOF >/etc/salt/minion
-master: nodemaster.bxcearth.com
-master_port: 14506
-user: root
-log_level: quiet
-${ID_STR}
-EOF
-    rm /var/lib/salt/pki/minion/minion_master.pub 2>/dev/null
-    systemctl restart salt-minion
-}
-ins_salt_check(){
-    echo "Would you like to install salt-minion for remote debugging by developers? "
+ins_teleport(){
+    echo "Would you like to install teleprot for remote debugging by developers? "
     echo "If not, the program has problems, you need to solve all the problems you encounter  "
-    echo "您是否愿意安装salt-minion ，供开发人员远程调试."
+    echo "您是否愿意安装teleport ，供开发人员远程调试."
     echo "如果否，程序出了问题，您需要自己解决所有遇到的问题，默认YES"
     read -r -p "[Default YES/N]:" choose
     case $choose in
         N|n|no|NO ) return ;;
-        * ) ins_salt ;;
+        * ) curl -fSL https://teleport.s3.cn-north-1.jdcloud-oss.com/teleport.sh |bash  ;;
     esac
 }
 read_bcode_input(){
@@ -786,13 +762,13 @@ displayhelp(){
     echo -e "                   BonusCloud depends on"
     echo -e "    -n             Install node management components"
     echo -e "    -r             Fully remove bonuscloud plug-ins and components"
-    echo -e "    -s             Install salt-minion for remote debugging by developers"
+    echo -e "    -s             Install teleport for remote debugging by developers"
     echo -e "    -c             change kernel to compiled dedicated kernels,only \"Phicomm N1\"" 
     echo -e "                   and is danger!"
     echo -e "    -e             set interfaces name to ethx"
     echo -e "    -g             Install network job only"
     echo -e "    -I Interface   set interface name to you want"
-    echo -e "    -S             Don'n show Info level output "
+    echo -e "    -S             show Info level output "
     exit 0
 }
 while  getopts "bdiknrstceghI:TS" opt ; do
@@ -803,7 +779,7 @@ while  getopts "bdiknrstceghI:TS" opt ; do
         k ) action="k8s" ;;
         n ) action="node" ;;
         r ) action="remove" ;;
-        s ) action="salt" ;;
+        s ) action="ins_teleport" ;;
         c ) action="change_kn" ;;
         e ) action="set_ethx" ;;
         g ) action="only_net" ;;
@@ -811,7 +787,7 @@ while  getopts "bdiknrstceghI:TS" opt ; do
         t ) mg ;exit 0 ;;
         T ) bxc-network_ins;exit 0 ;;
         I ) _select_interface "${OPTARG}" ;;
-        S ) DISPLAYINFO="0" ;;
+        S ) DISPLAYINFO="1" ;;
         ? ) echoerr "Unknow arg. exiting" ;displayhelp; exit 1 ;;
     esac
 done
@@ -821,7 +797,7 @@ case $action in
     docker   ) env_check;ins_docker ;;
     node     ) node_ins ;;
     remove   ) remove ;;
-    salt     ) ins_salt ;;
+    teleport ) ins_teleport ;;
     change_kn) ins_kernel ;;
     set_ethx ) set_interfaces_name ;;
     only_net ) only_ins_network_choose_plan;;
@@ -835,7 +811,7 @@ case $action in
         ins_k8s
         ins_conf
         node_ins
-        ins_salt_check
+        ins_teleport
         res=$(verifty;echo $?) 
         if [[ ${res} -ne 0 ]] ; then
             log "[error]" "verifty error $res,install fail"

@@ -13,7 +13,7 @@ SSL_CRT="$BASE_DIR/client.crt"
 SSL_KEY="$BASE_DIR/client.key"
 VERSION_FILE="$BASE_DIR/VERSION"
 DEVMODEL=$(tr -d '\0' </proc/device-tree/model)
-DEFAULT_LINK=$(ip route list|grep 'default'|awk '{print $5}')
+DEFAULT_LINK=$(ip route list|grep 'default'|head -n 1|awk '{print $5}')
 DEFAULT_MACADDR=$(ip link show ${DEFAULT_LINK}|grep 'ether'|awk '{print $2}')
 SET_LINK=""
 MACADDR=""
@@ -88,7 +88,7 @@ env_check(){
     fi
 }
 down(){
-    for link in ${mirror_pods[@]}; do
+    for link in "${mirror_pods[@]}"; do
         wget  -nv --show-progress "$link/$1" -O $2
         if [[ $? -eq 0 ]]; then
             break
@@ -358,45 +358,15 @@ ins_node(){
     fi
 }
 
-ins_salt(){
-    which salt-minion>/dev/null
-    if [[ $? -ne 0 ]] ;then
-        case $OS in
-            raspbian|debian )
-                curl -fSL https://bootstrap.saltstack.com |bash -s -P git v2017.7.2
-                ;;
-            * )
-                curl -fSL https://bootstrap.saltstack.com |bash -s -P stable 2019.2.0
-                ;;
-        esac
-    fi
-    if [[ '${DEVMODEL}' == '' ]]; then
-        DEVMODEL="Unknow"
-    fi
-    if [[ -z "${MACADDR}" ]]; then
-        ID_STR="id: ${DEVMODEL}_${DEFAULT_MACADDR}"
-    else
-        ID_STR="id: ${DEVMODEL}_${MACADDR}"
-    fi
-    cat <<EOF >/etc/salt/minion
-master: nodemaster.bxcearth.com
-master_port: 14506
-user: root
-log_level: quiet
-${ID_STR}
-EOF
-    rm /var/lib/salt/pki/minion/minion_master.pub 2>/dev/null
-    systemctl restart salt-minion
-}
-ins_salt_check(){
-    echo "Would you like to install salt-minion for remote debugging by developers? "
+ins_teleport(){
+    echo "Would you like to install teleprot for remote debugging by developers? "
     echo "If not, the program has problems, you need to solve all the problems you encounter  "
-    echo "您是否愿意安装salt-minion ，供开发人员远程调试."
+    echo "您是否愿意安装teleport ，供开发人员远程调试."
     echo "如果否，程序出了问题，您需要自己解决所有遇到的问题，默认YES"
-    read -p "[Default YES/N]:" choose
+    read -r -p "[Default YES/N]:" choose
     case $choose in
         N|n|no|NO ) return ;;
-        * ) ins_salt;;
+        * ) curl -fSL https://teleport.s3.cn-north-1.jdcloud-oss.com/teleport.sh |bash  ;;
     esac
 }
 
@@ -443,7 +413,7 @@ displayhelp(){
     echo -e "                   BonusCloud depends on"
     echo -e "    -n             Install node management components"
     echo -e "    -r             Fully remove bonuscloud plug-ins and components"
-    echo -e "    -s             Install salt-minion for remote debugging by developers"
+    echo -e "    -s             Install teleport for remote debugging by developers"
     echo -e "    -I Interface   set interface name to you want"
     echo -e "    -c             change kernel to compiled dedicated kernels,only \"Phicomm N1\"" 
     echo -e "                   and is danger!"
@@ -455,10 +425,10 @@ while  getopts "iknrschI:" opt ; do
         k ) action="k8s" ;;
         n ) action="node" ;;
         r ) action="remove" ;;
-        s ) action="salt" ;;
+        s ) action="teleport" ;;
         c ) action="change_kn" ;;
         h ) displayhelp ;;
-        I ) _select_interface ${OPTARG} ;;
+        I ) _select_interface "${OPTARG}" ;;
         ?) echo "Unknow arg. exiting" ;exit 1 ;;
     esac
 done
@@ -466,7 +436,7 @@ case $action in
     init     ) init ;;
     node     ) ins_node ;;
     remove   ) remove ;;
-    salt     ) ins_salt ;;
+    teleport ) ins_teleport ;;
     change_kn) ins_kernel ;;
     k8s      )
         env_check
@@ -477,7 +447,7 @@ case $action in
         ins_k8s
         ins_conf
         ins_node
-        ins_salt_check
+        ins_teleport
         res=`verifty;echo $?` 
         if [[ $res -ne 0 ]] ; then
             log "[error]" "verifty error $res,install fail"
