@@ -15,6 +15,9 @@ VERSION_FILE="$BASE_DIR/VERSION"
 DEVMODEL=$(cat /proc/device-tree/model 2>/dev/null |tr -d '\0')
 DEFAULT_LINK=$(ip route list|grep 'default'|head -n 1|awk '{print $5}')
 DEFAULT_MACADDR=$(ip link show "${DEFAULT_LINK}"|grep 'ether'|awk '{print $2}')
+DEFAULT_GW=$(ip route list|grep 'default'|head -n 1|awk '{print $3}')
+DEFAULT_SUBNET=$(ip addr show "${DEFAULT_LINK}"|grep 'inet '|awk '{print $2}')
+DEFAULT_HOSTIP=$(echo "${DEFAULT_SUBNET}"|awk -F/ '{print $1}')
 SET_LINK=""
 MACADDR=""
 
@@ -184,7 +187,8 @@ check_info(){
     fi
 }
 ins_docker(){
-    ret=$(check_doc;echo $?)
+    check_doc
+    ret=$?
     if [[ ${ret} -eq 0 || ${ret} -eq 2 ]]   ; then
         log "[info]" "docker was found! skiped"
         return 0
@@ -228,6 +232,16 @@ ins_docker(){
         log "[info]" "${PG} install -y  docker-ce-$line "
         systemctl enable docker &&systemctl start docker
     fi
+}
+ins_jq(){
+    if which jq>/dev/null; then
+        return
+    fi
+    case $PG in
+        apt     ) $PG install -y jq ;;
+        yum     ) $PG install -y jq ;;
+        pacman  ) $PG -S jq ;;
+    esac
 }
 init(){
     echo >$LOG_FILE
@@ -571,6 +585,12 @@ only_ins_network_docker_run(){
         echoerr "bound fail\n${fail_log}\n"
         docker stop "${con_id}"
         docker rm "${con_id}"
+        return 
+    fi
+    create_status=$(docker container inspect "${con_id}"|grep -Po '"Status": "\K.*?(?=")')
+    if [[ "$create_status" == "created" ]]; then
+        echowarn "Delete can not run container\n"
+        docker container rm "${con_id}"
     fi
 }
 _get_ip_mainland(){
@@ -584,6 +604,7 @@ _get_ip_mainland(){
 }
 only_ins_network_docker_openwrt(){
     ins_docker
+    ins_jq
     docker pull qinghon/bxc-op:18.06.2
     docker tag qinghon/bxc-op:18.06.2 bxc-op:18.06.2
     if ! docker images --format "{{.Repository}}"|grep -q bxc-op ; then
@@ -594,7 +615,7 @@ only_ins_network_docker_openwrt(){
     echoinfo "Input email:";read -r  email
     if [[ -z "${bcode}" ]] || [[ -z "${email}" ]]; then
         echowarn "Please Input bcode and email. You can try \"bash $0 -b\" to bound\n"
-        return 1
+        return 2
     fi
     if [[ ${#bcode} -le 3 && ${bcode} -le 100 ]]; then
         json=$(curl -fsSL "https://console.bonuscloud.io/api/bcode/getBcodeForOther/?email=${email}")
@@ -612,11 +633,14 @@ only_ins_network_docker_openwrt(){
         else
             len=$bcode
         fi
+        if [[ -z ${read_all_bcode} ]]; then
+            echoerr "not found bcode in ${email}\n"
+        fi
     else
         read_bcode=$(echo "${bcode}"|grep -E -o "[0-9a-f]{4}-[0-9a-f]{8}-([0-9a-f]{4}-){2}[0-9a-f]{4}-[0-9a-f]{12}")
         if [[ -z "${read_bcode}" ]]; then
             echowarn "bcode input error\n"
-            return 2
+            return 3
         else
             read_all_bcode="${read_bcode}"
             len=1
@@ -628,13 +652,14 @@ only_ins_network_docker_openwrt(){
     fi
     
     for i in $(echo "${read_all_bcode}"|head -n "$len") ; do
+        echoinfo "bcode: $i"
         only_ins_network_docker_run "${i}" "${email}"
     done
 }
 only_ins_network_choose_plan(){
     echoinfo "choose plan:\n"
-    echoinfo "\t1) run as base progress(只运行基础进程,兼容性差,内存占用低)\n"
-    echoinfo "\t2) run openwrt as docker (运行在docker里,兼容性好,内存占用高)\n"
+    echoinfo "\t1) run as base progress,only one  (只运行基础进程,兼容性差,内存占用低,单开)\n"
+    echoinfo "\t2) run openwrt as docker, more (运行在docker里,兼容性好,内存占用高,可多开)\n"
     echoinfo "CHOOSE [1|2]:"
     read -r  CHOOSE
     case $CHOOSE in
@@ -708,10 +733,11 @@ mg(){
     # k8s check
     k8s_file=$(check_k8s;echo $?)
     k8s_progress=$(pgrep kubelet>/dev/null;echo $?)
-    
-    #docker check
-    doc_che_ret=$(check_doc)
+    [[ $k8s_file -eq 0 ]] &&k8s_version=$(kubelet --version|awk '{print $2}')
 
+    #docker check
+    doc_che_ret=$(check_doc;echo $?)
+    [[ ${doc_che_ret} -ne 1 ]]&& doc_v=$(docker version --format "{{.Server.Version}}")
     #output
     echowarn "\nbxc-network:\n"
     echo -e -n "|install?\t|running?\t|connect?\t|proxy aleady?\n"
@@ -727,8 +753,10 @@ mg(){
     echowarn "\nk8s:\n"
     [ "${k8s_file}" -ne 0 ]&&{ echoins "1";}||echoins "0"
     [ "${k8s_progress}" -ne 0 ]&&{ echorun "1";}||echorun "0"
+    [[ -n $k8s_version ]] &&echoinfo "${k8s_version}\t"
     echowarn "\ndocker:\n"
     [[ ${doc_che_ret} -eq 1  ]] && { echoins "1";}||echoins "0"
+    [[ -n ${doc_v} ]] &&echoinfo "$doc_v\t"
     echoinfo "\n"
 }
 verifty(){
@@ -767,11 +795,12 @@ displayhelp(){
     echo -e "                   and is danger!"
     echo -e "    -e             set interfaces name to ethx"
     echo -e "    -g             Install network job only"
+    echo -e "    -b             bound for command"
     echo -e "    -I Interface   set interface name to you want"
     echo -e "    -S             show Info level output "
     exit 0
 }
-while  getopts "bdiknrstceghI:TS" opt ; do
+while  getopts "bdiknrstceghI:S" opt ; do
     case $opt in
         i ) action="init" ;;
         b ) bound ;exit 0;;
@@ -785,7 +814,6 @@ while  getopts "bdiknrstceghI:TS" opt ; do
         g ) action="only_net" ;;
         h ) displayhelp ;;
         t ) mg ;exit 0 ;;
-        T ) bxc-network_ins;exit 0 ;;
         I ) _select_interface "${OPTARG}" ;;
         S ) DISPLAYINFO="1" ;;
         ? ) echoerr "Unknow arg. exiting" ;displayhelp; exit 1 ;;
