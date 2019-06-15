@@ -225,7 +225,9 @@ ins_docker(){
     else 
         log "[error]" "package manager ${PG} not support "
     fi
-    if ! check_doc ; then
+    check_doc
+    ret=$?
+    if [[ ${ret} -eq 0 || ${ret} -eq 2 ]]  ; then
         log "[error]" "docker install fail,please check ${PG} environment"
         exit 1
     else
@@ -237,6 +239,7 @@ ins_jq(){
     if which jq>/dev/null; then
         return
     fi
+    env_check
     case $PG in
         apt     ) $PG install -y jq ;;
         yum     ) $PG install -y jq ;;
@@ -652,14 +655,14 @@ only_ins_network_docker_openwrt(){
     fi
     
     for i in $(echo "${read_all_bcode}"|head -n "$len") ; do
-        echoinfo "bcode: $i"
+        echoinfo "bcode: $i\n"
         only_ins_network_docker_run "${i}" "${email}"
     done
 }
 only_ins_network_choose_plan(){
     echoinfo "choose plan:\n"
-    echoinfo "\t1) run as base progress,only one  (只运行基础进程,兼容性差,内存占用低,单开)\n"
-    echoinfo "\t2) run openwrt as docker, more (运行在docker里,兼容性好,内存占用高,可多开)\n"
+    echoinfo "\t1) run as base progress,only one(只运行基础进程,兼容性差,内存低,单开)\n"
+    echoinfo "\t2) run openwrt as docker,more(运行在docker里,兼容性好,内存占用高,可多开)\n"
     echoinfo "CHOOSE [1|2]:"
     read -r  CHOOSE
     case $CHOOSE in
