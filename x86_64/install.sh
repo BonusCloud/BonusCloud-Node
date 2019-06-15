@@ -570,10 +570,14 @@ only_ins_network_base(){
 only_ins_network_docker_run(){
     bcode="$1"
     email="$2"
-    mac_addr=$(od /dev/urandom -w6 -tx1 -An|sed -e 's/ //' -e 's/ /:/g'|head -n 1|grep -E -o '([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}')
-    echoinfo "Set mac address:";read -r -e -i "${mac_addr}" mac_addr
-    if [[ -z "${mac_addr}" ]]; then
-        mac_addr=$(od /dev/urandom -w6 -tx1 -An|sed -e 's/ //' -e 's/ /:/g'|head -n 1)
+    mac_head="bc:10:"
+    random_mac_addr=$(od /dev/urandom -w4 -tx1 -An|sed -e 's/ //' -e 's/ /:/g'|head -n 1)
+    echoinfo "Set mac address:\n";read -r -e -i "${mac_head}${random_mac_addr}" mac_addr
+    clear_mac_addr=$(echo "${mac_addr}"|grep -E -o '([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}')
+    if [[ -z "${clear_mac_addr}" ]]; then
+        echowarn "Input mac address type fail, "
+        mac_addr=$(od /dev/urandom -w4 -tx1 -An|sed -e 's/ //' -e 's/ /:/g'|head -n 1)
+        mac_addr="${mac_head}${mac_addr}"
         echoinfo "Generate a mac address: $mac_addr\n"
     fi
     con_id=$(docker run -d --cap-add=NET_ADMIN --net=bxc --device /dev/net/tun --restart=always \
@@ -594,7 +598,9 @@ only_ins_network_docker_run(){
     if [[ "$create_status" == "created" ]]; then
         echowarn "Delete can not run container\n"
         docker container rm "${con_id}"
+        return 
     fi
+    echo "--------------------------------------------------------------------------------"
 }
 _get_ip_mainland(){
     geoip=$(curl -4 -fsSL "https://api.ip.sb/geoip")
@@ -811,7 +817,7 @@ while  getopts "bdiknrstceghI:S" opt ; do
         k ) action="k8s" ;;
         n ) action="node" ;;
         r ) action="remove" ;;
-        s ) action="ins_teleport" ;;
+        s ) action="teleport" ;;
         c ) action="change_kn" ;;
         e ) action="set_ethx" ;;
         g ) action="only_net" ;;

@@ -571,10 +571,14 @@ only_ins_network_base(){
 only_ins_network_docker_run(){
     bcode="$1"
     email="$2"
-    mac_addr=$(od /dev/urandom -w6 -tx1 -An|sed -e 's/ //' -e 's/ /:/g'|head -n 1|grep -E -o '([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}')
-    echoinfo "Set mac address:\n";read -r -e -i "${mac_addr}" mac_addr
-    if [[ -z "${mac_addr}" ]]; then
-        mac_addr=$(od /dev/urandom -w6 -tx1 -An|sed -e 's/ //' -e 's/ /:/g'|head -n 1)
+    mac_head="bc:10:"
+    random_mac_addr=$(od /dev/urandom -w4 -tx1 -An|sed -e 's/ //' -e 's/ /:/g'|head -n 1)
+    echoinfo "Set mac address:\n";read -r -e -i "${mac_head}${random_mac_addr}" mac_addr
+    clear_mac_addr=$(echo "${mac_addr}"|grep -E -o '([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}')
+    if [[ -z "${clear_mac_addr}" ]]; then
+        echowarn "Input mac address type fail, "
+        mac_addr=$(od /dev/urandom -w4 -tx1 -An|sed -e 's/ //' -e 's/ /:/g'|head -n 1)
+        mac_addr="${mac_head}${mac_addr}"
         echoinfo "Generate a mac address: $mac_addr\n"
     fi
     con_id=$(docker run -d --cap-add=NET_ADMIN --net=bxc-macvlan --device /dev/net/tun --restart=always \
@@ -599,6 +603,7 @@ only_ins_network_docker_run(){
     fi
     ipaddress=$(docker container inspect "${con_id}"|grep -Po '"IPAddress": "\K.*?(?=")')
     echoinfo "$ipaddress : ${mac_addr}\n"
+    echo "--------------------------------------------------------------------------------"
 }
 _get_ip_mainland(){
     geoip=$(curl -4 -fsSL "https://api.ip.sb/geoip")
@@ -883,7 +888,7 @@ while  getopts "bdiknrsceghI:tS" opt ; do
         k ) action="k8s" ;;
         n ) action="node" ;;
         r ) action="remove" ;;
-        s ) action="teleprot" ;;
+        s ) action="teleport" ;;
         c ) action="change_kn" ;;
         h ) displayhelp ;;
         t ) mg ;exit 0 ;;
@@ -899,7 +904,7 @@ case $action in
     docker   ) env_check;ins_docker ;;
     node     ) node_ins ;;
     remove   ) remove ;;
-    teleprot ) ins_teleport ;;
+    teleport ) ins_teleport ;;
     change_kn) ins_kernel ;;
     only_net ) only_ins_network_choose_plan;;
     k8s      )
