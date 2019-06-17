@@ -225,7 +225,7 @@ ins_docker(){
     fi
     check_doc
     ret=$?
-    if [[ ${ret} -eq 0 || ${ret} -eq 2 ]]  ; then
+    if [[ ${ret} -eq 1 || ${ret} -eq 2 ]]  ; then
         log "[error]" "docker install fail,please check ${PG} environment"
         exit 1
     else
