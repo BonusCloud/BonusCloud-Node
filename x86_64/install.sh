@@ -255,7 +255,6 @@ init(){
     fi
     mkdir -p /etc/cni/net.d
     mkdir -p $BASE_DIR/{scripts,nodeapi,compute}
-    swapoff -a
     env_check
     check_info
 }
@@ -291,6 +290,8 @@ pull_docker_image(){
     docker tag registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/kube-proxy:v1.12.3 k8s.gcr.io/kube-proxy:v1.12.3
 }
 ins_k8s(){
+    swapoff -a
+    sed -i 's/^\/swapfile/#\/swapfile/g' /etc/fstab
     if ! check_k8s ; then
         if [[ "$PG" == "apt" ]]; then
             _k8s_ins_apt
@@ -733,7 +734,7 @@ mg(){
     [[ ${network_docker} -eq 0  && -n "${network_con_id}" ]] &&tun0exits=$(docker exec -i "${network_con_id}" /bin/sh -c "ip link show dev tun0>/dev/null;echo $?")
     [[ $network_file_have -ne 0 && -z "${network_con_id}" ]] &&tun0exits=1
 
-    goproxy_progress=$(curl -x "127.0.0.1:8901" https://www.baidu.com -o /dev/null 2>/dev/null;echo $?)
+    goproxy_progress=$(curl -x "[::1]:8901" https://www.baidu.com -o /dev/null 2>/dev/null;echo $?)
     [[ -n "${network_con_id}" ]] &&goproxy_progress=$(docker exec -i "${network_con_id}" /bin/sh -c "pgrep bxc-worker>/dev/null;echo $?")
     # node check
     node_progress=$(pgrep  node>/dev/null;echo $?)

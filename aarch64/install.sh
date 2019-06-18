@@ -253,7 +253,6 @@ init(){
     fi
     mkdir -p /etc/cni/net.d
     mkdir -p $BASE_DIR/{scripts,nodeapi,compute}
-    swapoff -a
     env_check
     check_info
 }
@@ -289,6 +288,8 @@ pull_docker_image(){
     docker tag registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/kube-proxy-arm:v1.12.3 k8s.gcr.io/kube-proxy:v1.12.3 
 }
 ins_k8s(){
+    swapoff -a
+    sed -i 's/^\/swapfile/#\/swapfile/g' /etc/fstab
     if ! check_k8s ; then
         if [[ "$PG" == "apt" ]]; then
             _k8s_ins_apt
@@ -626,7 +627,7 @@ only_ins_network_docker_openwrt(){
     echoinfo "Input bcode:";read -r  bcode
     echoinfo "Input email:";read -r  email
     if [[ -z "${bcode}" ]] || [[ -z "${email}" ]]; then
-        echowarn "Please Input bcode and email. You can try \"bash $0 -b\" to bound\n"
+        echowarn "Please Input bcode and email.\n"
         return 2
     fi
     if [[ ${#bcode} -le 3 && ${bcode} -le 100 ]]; then
@@ -698,6 +699,12 @@ only_ins_network_choose_plan(){
         2 ) only_ins_network_docker_openwrt ;;
         * ) echowarn "\nno choose(未选择)\n";;
     esac
+}
+_only_network_remove(){
+    docker container stop $(docker ps -a --filter="ancestor=bxc-net:arm64" --format "{{.ID}}")
+    docker container rm $(docker ps -a --filter="ancestor=bxc-net:arm64" --format "{{.ID}}")
+    docker rmi qinghon/bxc-net:arm64 bxc-net:arm64
+    docker network rm bxc-macvlan bxc
 }
 change_net(){
     if [[ "$PG" == "apt" ]]; then
