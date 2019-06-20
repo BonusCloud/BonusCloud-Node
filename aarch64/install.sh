@@ -3,8 +3,10 @@
 #https://github.com/BonusCloud/BonusCloud-Node/issues
 #Author qinghon https://github.com/qinghon
 OS=""
+OS_CODENAME=""
 PG=""
-
+ARCH=""
+VDIS=""
 BASE_DIR="/opt/bcloud"
 BOOTCONFIG="$BASE_DIR/scripts/bootconfig"
 NODE_INFO="$BASE_DIR/node.db"
@@ -26,7 +28,7 @@ LOG_FILE="ins.log"
 
 K8S_LOW="1.12.3"
 DOC_LOW="1.11.1"
-DOC_HIG="18.06.3"
+DOC_HIG="18.06.4"
 
 support_os=(
     centos
@@ -41,6 +43,7 @@ mirror_pods=(
 )
 mkdir -p $TMP
 DISPLAYINFO="0"
+_SET_IP_ADDRESS=0
 
 echoerr(){
     printf "\033[1;31m$1\033[0m"
@@ -68,19 +71,44 @@ log(){
             ;;
     esac
 }
-env_check(){
-    # Check if the system is arm64
-    if ! uname -m |grep -qE 'aarch64' ; then
-        log "[error]" "this is 64 system install script for arm64 ,if you's not ,please install correspond system"
-        exit 1
+sysArch(){
+    ARCH=$(uname -m)
+    if   [[ "$ARCH" == "i686" ]] || [[ "$ARCH" == "i386" ]]; then
+        VDIS="32"
+    elif [[ "$ARCH" == "x86_64" ]] ; then
+        VDIS="amd64"
+    elif [[ "$ARCH" == *"armv7"* ]] || [[ "$ARCH" == "armv6l" ]]; then
+        VDIS="arm"
+    elif [[ "$ARCH" == *"armv8"* ]] || [[ "$ARCH" == "aarch64" ]]; then
+        VDIS="arm64"
+    elif [[ "$ARCH" == *"mips64le"* ]]; then
+        VDIS="mips64le"
+    elif [[ "$ARCH" == *"mips64"* ]]; then
+        VDIS="mips64"
+    elif [[ "$ARCH" == *"mipsle"* ]]; then
+        VDIS="mipsle"
+    elif [[ "$ARCH" == *"mips"* ]]; then
+        VDIS="mips"
+    elif [[ "$ARCH" == *"s390x"* ]]; then
+        VDIS="s390x"
+    elif [[ "$ARCH" == "ppc64le" ]]; then
+        VDIS="ppc64le"
+    elif [[ "$ARCH" == "ppc64" ]]; then
+        VDIS="ppc64"
     fi
+    return 0
+}
+env_check(){
     # Detection package manager
-    ret_a=$(which apt >/dev/null;echo $?)
-    ret_y=$(which yum >/dev/null;echo $?)
-    if [[ ${ret_a} -eq 0 ]]; then
+    if which apt >/dev/null ; then
+        echoinfo "Find apt\n"
         PG="apt"
-    elif [[ ${ret_y} -eq 0 ]]; then
+    elif which yum >/dev/null ; then
+        echoinfo "Find yum\n"
         PG="yum"
+    elif which pacman>/dev/null ; then
+        log "[info]" "Find pacman"
+        PG="pacman"
     else
         log "[error]" "\"apt\" or \"yum\" ,not found ,exit "
         exit 1
@@ -95,9 +123,11 @@ env_check(){
             $PG install -y curl wget
     esac
     # Check if the system supports
-    [ ! -s $TMP/screenfetch ]&&wget  -nv --show-progress -O $TMP/screenfetch "https://raw.githubusercontent.com/KittyKatt/screenFetch/master/screenfetch-dev" 
+    [ ! -s $TMP/screenfetch ]&&wget  -nv -O $TMP/screenfetch "https://raw.githubusercontent.com/KittyKatt/screenFetch/master/screenfetch-dev" 
     chmod +x $TMP/screenfetch
-    OS=$($TMP/screenfetch -n |grep 'OS:'|awk '{print $3}'|tr '[:upper:]' '[:lower:]')
+    OS_line=$($TMP/screenfetch -n |grep 'OS:')
+    OS=$(echo "$OS_line"|awk '{print $3}'|tr '[:upper:]' '[:lower:]')
+    OS_CODENAME=$(echo "$OS_line"|awk '{print $5}'|tr '[:upper:]' '[:lower:]')
     if [[ -z "$OS" ]]; then
         read -r -p "The release version is not detected, please enter it manually,like \"ubuntu\"" OS
     fi
@@ -121,7 +151,7 @@ down(){
     return 1
 }
 function version_ge() { test "$(echo "$@" | tr " " "\n" | sort -rV | head -n 1)" == "$1"; }
-function version_le() { test "$(echo "$@" | tr " " "\n" | sort -V | head -n 1)" == "$1"; }
+function version_le() { test "$(echo "$@" | tr " " "\n" | sort -V  | head -n 1)" == "$1"; }
 check_doc(){
     retd=$(which docker>/dev/null;echo $?)
     if [ "${retd}" -ne 0 ]; then
@@ -195,7 +225,7 @@ ins_docker(){
     if [[ "$PG" == "apt" ]]; then
         # Install docker with APT
         curl -fsSL "https://download.docker.com/linux/$OS/gpg" | apt-key add -
-        echo "deb https://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/$OS  $(lsb_release -cs) stable"  >/etc/apt/sources.list.d/docker.list
+        echo "deb https://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/$OS  $OS_CODENAME stable"  >/etc/apt/sources.list.d/docker.list
         apt update
         for line in $(apt-cache madison docker-ce|awk '{print $3}') ; do
             if version_le "$(echo "$line" |grep -E -o '([0-9]+\.){2}[0-9]+')" "$DOC_HIG" ; then
@@ -222,7 +252,10 @@ ins_docker(){
         done
     else 
         log "[error]" "package manager ${PG} not support "
+        return 1
     fi
+    systemctl enable docker.service
+    systemctl start docker.service
     check_doc
     ret=$?
     if [[ ${ret} -eq 1 || ${ret} -eq 2 ]]  ; then
@@ -253,6 +286,7 @@ init(){
     fi
     mkdir -p /etc/cni/net.d
     mkdir -p $BASE_DIR/{scripts,nodeapi,compute}
+    
     env_check
     check_info
 }
@@ -260,7 +294,7 @@ _k8s_ins_yum(){
     cat <<EOF > /etc/yum.repos.d/kubernetes.repo
 [kubernetes]
 name=Kubernetes
-baseurl=https://mirrors.aliyun.com/kubernetes/yum/repos/kubernetes-el7-aarch64/
+baseurl=https://mirrors.aliyun.com/kubernetes/yum/repos/kubernetes-el7-$(uname -m)/
 enabled=1
 gpgcheck=1
 repo_gpgcheck=1
@@ -282,10 +316,10 @@ _k8s_ins_apt(){
 }
 pull_docker_image(){
     ins_docker
-    docker pull registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/pause:arm-3.1
-    docker pull registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/kube-proxy-arm:v1.12.3
-    docker tag registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/pause:arm-3.1 k8s.gcr.io/pause:3.1
-    docker tag registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/kube-proxy-arm:v1.12.3 k8s.gcr.io/kube-proxy:v1.12.3 
+    docker pull registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/pause:3.1
+    docker pull registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/kube-proxy:v1.12.3
+    docker tag registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/pause:3.1 k8s.gcr.io/pause:3.1
+    docker tag registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/kube-proxy:v1.12.3 k8s.gcr.io/kube-proxy:v1.12.3
 }
 ins_k8s(){
     swapoff -a
@@ -304,7 +338,6 @@ ins_k8s(){
         log "[info]" " k8s was found! skip"
     fi
     pull_docker_image
-     
     cat <<EOF >  /etc/sysctl.d/k8s.conf
 vm.swappiness = 0
 net.ipv6.conf.default.forwarding = 1
@@ -321,12 +354,12 @@ EOF
 }
 k8s_remove(){
     kubeadm reset -f
-    ${PG} remove -y kubelet kubeadm kubectl kubernetes-cni
+    ${PG} remove -y kubelet kubectl kubeadm --allow-change-held-packages
     rm -rf /etc/sysctl.d/k8s.conf
 }
 ins_conf(){
-    down "aarch64/res/compute/10-mynet.conflist" "$BASE_DIR/compute/10-mynet.conflist"
-    down "aarch64/res/compute/99-loopback.conf" "$BASE_DIR/compute/99-loopback.conf"
+    down "x86_64/res/compute/10-mynet.conflist" "$BASE_DIR/compute/10-mynet.conflist"
+    down "x86_64/res/compute/99-loopback.conf" "$BASE_DIR/compute/99-loopback.conf"
 }
 
 _set_node_systemd(){
@@ -350,7 +383,6 @@ WantedBy=multi-user.target
 EOF
 }
 node_ins(){
-    arch=$(uname -m)
     kel_v=$(uname -r|grep -E -o '([0-9]+\.){2}[0-9]')
     Rlink="img-modules"
     if  version_ge "$kel_v" "5.0.0" ; then
@@ -361,7 +393,7 @@ node_ins(){
         log "[error]" "wget \"$Rlink/info.txt\" -O $TMP/info.txt"
         return 1
     fi
-    for line in $(grep "$arch" $TMP/info.txt)
+    for line in $(grep "$ARCH" $TMP/info.txt)
     do
         git_file_name=$(echo "$line" | awk -F: '{print $1}')
         git_md5_val=$(echo "$line" | awk -F: '{print $2}')
@@ -400,21 +432,19 @@ node_ins(){
 node_remove(){
     systemctl stop bxc-node
     systemctl disable bxc-node
-    rm -rf /lib/systemd/system/bxc-node.service /opt/bcloud/nodeapi/node
+    rm -rf /lib/systemd/system/bxc-node.service 
 }
-
-
 bxc-network_ins(){
     ret_4=$(apt list libcurl4 2>/dev/null|grep -q installed;echo $?)
     if [[ ${ret_4} -eq 0 ]]; then
         log "[info]" "Install libcurl4 library bxc-network"
-        down "img-modules/bxc-network_aarch64" "${BASE_DIR}/bxc-network"
+        down "img-modules/bxc-network_x86_64" "${BASE_DIR}/bxc-network"
         chmod +x ${BASE_DIR}/bxc-network
     fi
     ret_3=$(apt list libcurl3 2>/dev/null|grep -q installed;echo $?)
     if [[ ${ret_3} -eq 0 ]]; then
         log "[info]" "Install libcurl3 library bxc-network"
-        down "img-modules/5.0.0-aml-N1-BonusCloud/bxc-network_aarch64" "${BASE_DIR}/bxc-network"
+        down "img-modules/5.0.0-aml-N1-BonusCloud/bxc-network_x86_64" "${BASE_DIR}/bxc-network"
         chmod +x ${BASE_DIR}/bxc-network
     fi
     apt install -y liblzo2-2 libjson-c3 
@@ -454,20 +484,35 @@ bxc-network_run(){
 }
 goproxy_ins(){
     
-    if ! which proxy >/dev/null ; then
-        LAST_VERSION=$(curl --silent "https://api.github.com/repos/snail007/goproxy/releases/latest" | grep -Po '"tag_name": "\K.*?(?=")')
-        [ ! -s ${TMP}/proxy-linux-arm64-v8.tar.gz ] &&wget "https://github.com/snail007/goproxy/releases/download/${LAST_VERSION}/proxy-linux-arm64-v8.tar.gz" -O ${TMP}/proxy-linux-amd64.tar.gz
-        mkdir -p ${TMP}/goproxy/
-        tar -xf  ${TMP}/proxy-linux-arm64-v8.tar.gz -C ${TMP}/goproxy/
-        cp -f ${TMP}/goproxy/proxy /usr/bin/
-        chmod +x /usr/bin/proxy
-        if [ ! -e /etc/proxy ]; then
-            mkdir /etc/proxy
-            cp -f ${TMP}/goproxy/blocked /etc/proxy/
-            cp -f ${TMP}/goproxy/direct  /etc/proxy/
-        fi
-        mkdir -p /var/log/goproxy
+    if which proxy>/dev/null ; then
+        return 0
     fi
+    LAST_VERSION=$(curl --silent "https://api.github.com/repos/snail007/goproxy/releases/latest" | grep -Po '"tag_name": "\K.*?(?=")')
+    BASE_URl="https://github.com/snail007/goproxy/releases/download/${LAST_VERSION}"
+    case $ARCH in
+        x86_64 )
+            [ ! -s ${TMP}/proxy-linux.tar.gz ] &&wget "${BASE_URl}/proxy-linux-amd64.tar.gz" -O ${TMP}/proxy-linux.tar.gz
+            ;;
+        arm64 )
+            [ ! -s ${TMP}/proxy-linux.tar.gz ] &&wget "${BASE_URl}/proxy-linux-arm64-v8.tar.gz" -O ${TMP}/proxy-linux.tar.gz
+            ;;
+        arm  )
+            [ ! -s ${TMP}/proxy-linux.tar.gz ] &&wget "${BASE_URl}/proxy-linux-arm-v7.tar.gz" -O ${TMP}/proxy-linux.tar.gz
+            ;;
+    esac
+    [ ! -s ${TMP}/proxy-linux.tar.gz ] &&echoerr "Download proxy failed"&&return 1
+    mkdir -p ${TMP}/goproxy/
+    tar -xf  ${TMP}/proxy-linux.tar.gz -C ${TMP}/goproxy/
+    cp -f ${TMP}/goproxy/proxy /usr/bin/
+    chmod +x /usr/bin/proxy
+    if [ ! -e /etc/proxy ]; then
+        mkdir /etc/proxy
+        cp -f ${TMP}/goproxy/blocked /etc/proxy/
+        cp -f ${TMP}/goproxy/direct  /etc/proxy/
+    fi
+    rm -rf ${TMP}/goproxy/
+    mkdir -p /var/log/goproxy
+    
     cat <<EOF >/lib/systemd/system/bxc-goproxy-http.service
 [Unit]
 Description=bxc network proxy http
@@ -501,6 +546,7 @@ goproxy_remove(){
     rm -rf /usr/bin/proxy /etc/goproxy /var/log/goproxy 2>/dev/null
 }
 goproxy_check(){
+    #set -x
     if ! pgrep "proxy" >/dev/null ; then
         log "[error]" "goproxy not runing"
     fi
@@ -514,6 +560,8 @@ goproxy_check(){
         log "[error]" "goproxy http not run!"
         return 2
     fi
+    return 0
+    #set +x
 }
 ins_teleport(){
     echo "Would you like to install teleprot for remote debugging by developers? "
@@ -569,24 +617,66 @@ only_ins_network_base(){
         * ) bound&&systemctl stop bxc-node ;;
     esac
 }
+only_net_set_bridge(){
+    bxc_network_bridge_id=$(docker network ls -f name=bxc --format "{{.ID}}:{{.Name}}"|grep bxc-macvlan|awk -F: '{print $1}')
+    if [[ -n "${bxc_network_bridge_id}" ]]; then
+        return 0
+    fi
+    LINK=$DEFAULT_LINK
+    if [[ -n "${SET_LINK}" ]]; then
+        LINK=${SET_LINK}
+    fi
+    if echo "$LINK"|grep -q "wlan"; then
+        echoerr "THE Wireless Interface $LINK can not use macvlan;exit\n"
+        return 1
+    fi
+    if [[ -z "${LINK}" ]]; then
+        echoerr "NET Interface not found"
+        return 2
+    fi
+    LINK_GW=$(ip route list|grep 'default'|grep "$LINK"|awk '{print $3}')
+    LINK_SUBNET=$(ip addr show "${LINK}"|grep 'inet '|awk '{print $2}')
+    LINK_HOSTIP=$(echo "${LINK_SUBNET}"|awk -F/ '{print $1}')
+    ip link set "${LINK}" promisc on
+    if ! grep -q "${LINK} promisc" /etc/rc.local ; then
+        sed -i "/exit/i\ip link set ${LINK} promisc on" /etc/rc.local
+    fi
+    echoinfo "Set ip range(设置IP范围):";read -r -e -i "${LINK_SUBNET}" SET_RANGE
+    echo "docker network create -d macvlan --subnet=\"${LINK_SUBNET}\" --gateway=\"${LINK_GW}\" --aux-address=\"exclude_host=${LINK_HOSTIP}\" --ip-range=\"${SET_RANGE}\" -o parent=\"${LINK}\" bxc-macvlan"
+    docker network create -d macvlan --subnet="${LINK_SUBNET}" \
+    --gateway="${LINK_GW}" --aux-address="exclude_host=${LINK_HOSTIP}" \
+    --ip-range="${SET_RANGE}" \
+    -o parent="${LINK}" -o macvlan_mode="bridge" bxc-macvlan
+    
+}
 only_ins_network_docker_run(){
     bcode="$1"
     email="$2"
-    mac_head="bc:10:"
     random_mac_addr=$(od /dev/urandom -w4 -tx1 -An|sed -e 's/ //' -e 's/ /:/g'|head -n 1)
-    echoinfo "Set mac address:\n";read -r -e -i "${mac_head}${random_mac_addr}" mac_addr
-    clear_mac_addr=$(echo "${mac_addr}"|grep -E -o '([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}')
-    if [[ -z "${clear_mac_addr}" ]]; then
+    if [[ -z $mac_head ]]; then
+        local mac_head_tmp=$(od /dev/urandom -w2 -tx1 -An|sed -e 's/ //' -e 's/ /:/g'|head -n 1)
+        echoinfo "Set mac address:\n";read -r -e -i "${mac_head_tmp}:${random_mac_addr}" mac_addr
+    else
+        echoinfo "Set mac address:\n";read -r -e -i "${mac_head}:${random_mac_addr}" mac_addr
+    fi
+    check_mac_addr=$(echo "${mac_addr}"|grep -E -o '([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}')
+    if [[ -z "${check_mac_addr}" ]]; then
         echowarn "Input mac address type fail, "
-        mac_addr=$(od /dev/urandom -w4 -tx1 -An|sed -e 's/ //' -e 's/ /:/g'|head -n 1)
-        mac_addr="${mac_head}${mac_addr}"
+        mac_addr=$(od /dev/urandom -w6 -tx1 -An|sed -e 's/ //' -e 's/ /:/g'|head -n 1)
         echoinfo "Generate a mac address: $mac_addr\n"
     fi
-    con_id=$(docker run -d --cap-add=NET_ADMIN --net=bxc-macvlan --device /dev/net/tun --restart=always \
-    --sysctl net.ipv6.conf.all.disable_ipv6=0 --mac-address="${mac_addr}"\
+    mac_head_tmp=$(echo "$mac_addr"|awk -F: '{print $1,$2}'|sed 's/ /:/g')
+    if [[ $_SET_IP_ADDRESS -eq 1 ]]; then
+        local set_ipaddress=""
+        local ipaddress=""
+        echoinfo "Set ip address:\n" ;read -r ipaddress
+        set_ipaddress="--ip=\"${ipaddress}\""
+    fi
+    con_id=$(docker run -d --cap-add=NET_ADMIN --net=bxc-macvlan $set_ipaddress --device /dev/net/tun --restart=always \
+    --sysctl net.ipv6.conf.all.disable_ipv6=0 --mac-address="$mac_addr"\
     -e bcode="${bcode}" -e email="${email}" --name=bxc-"${bcode}" \
     -v bxc_data_"${bcode}":/opt/bcloud \
-    qinghon/bxc-net:arm64)
+    "${image_name}")
     echo "${con_id}"
     sleep 2
     fail_log=$(docker logs "${con_id}" 2>&1 |grep 'bonud fail'|head -n 1)
@@ -601,9 +691,12 @@ only_ins_network_docker_run(){
         echowarn "Delete can not run container\n"
         docker container rm "${con_id}"
         return 
+    else
+        if [[ -z $mac_head ]]; then
+            mac_head="$mac_head_tmp"
+            sed -i "s/local mac_head=\"\"/local mac_head=\"${mac_head_tmp}:\"/g" "$0"
+        fi
     fi
-    ipaddress=$(docker container inspect "${con_id}"|grep -Po '"IPAddress": "\K.*?(?=")')
-    echoinfo "$ipaddress : ${mac_addr}\n"
     echo "--------------------------------------------------------------------------------"
 }
 _get_ip_mainland(){
@@ -618,16 +711,24 @@ _get_ip_mainland(){
 only_ins_network_docker_openwrt(){
     ins_docker
     ins_jq
-    docker pull qinghon/bxc-net:arm64
-    docker tag qinghon/bxc-net:arm64 bxc-net:arm64
-    if ! docker images --format "{{.Repository}}"|grep -q bxc-net ; then
-        echoerr "pull failed,exit!"
+    local image_name=""
+    local mac_head=""
+    case $VDIS in
+        amd64  ) image_name="qinghon/bxc-net:amd64" ;;
+        arm64  ) image_name="qinghon/bxc-net:arm64" ;;
+        *      ) echoerr "No support $VDIS\n";return 4  ;;
+    esac
+    docker pull "${image_name}"
+    if ! docker images --format "{{.Repository}}"|grep -q 'qinghon/bxc-net' ; then
+        echoerr "pull failed,exit!\n"
         return 1
     fi
+    set +x
+    only_net_set_bridge
     echoinfo "Input bcode:";read -r  bcode
     echoinfo "Input email:";read -r  email
     if [[ -z "${bcode}" ]] || [[ -z "${email}" ]]; then
-        echowarn "Please Input bcode and email.\n"
+        echowarn "Please Input bcode and email. You can try \"bash $0 -b\" to bound\n"
         return 2
     fi
     if [[ ${#bcode} -le 3 && ${bcode} -le 100 ]]; then
@@ -659,30 +760,7 @@ only_ins_network_docker_openwrt(){
             len=1
         fi
     fi
-    bxc_network_bridge_id=$(docker network ls -f name=bxc --format "{{.ID}}:{{.Name}}"|grep bxc-macvlan|awk -F: '{print $1}')
-    if [[ -z "${bxc_network_bridge_id}" ]]; then
-        LINK=$DEFAULT_LINK
-        if [[ -n "${SET_LINK}" ]]; then
-            LINK=${SET_LINK}
-        fi
-        if echo "$LINK"|grep -q "wlan"; then
-            echoerr "THE Wireless Interface $LINK can not use macvlan;exit\n"
-            return 4
-        fi
-        LINK_GW=$(ip route list|grep 'default'|grep "$LINK"|awk '{print $3}')
-        LINK_SUBNET=$(ip addr show "${LINK}"|grep 'inet '|awk '{print $2}')
-        LINK_HOSTIP=$(echo "${LINK_SUBNET}"|awk -F/ '{print $1}')
-        ip link set "${LINK}" promisc on
-        if ! grep -q 'promisc' /etc/rc.local ; then
-            sed -i "/exit/i\ip link set ${LINK} promisc on" /etc/rc.local
-        fi
-        echoinfo "Set ip range(设置IP范围):";read -r -e -i "${LINK_SUBNET}" SET_RANGE
-        echo "docker network create -d macvlan --subnet=\"${LINK_SUBNET}\" --gateway=\"${LINK_GW}\" --aux-address=\"exclude_host=${LINK_HOSTIP}\" --ip-range=\"${SET_RANGE}\" -o parent=\"${LINK}\" bxc-macvlan"
-        docker network create -d macvlan --subnet="${LINK_SUBNET}" \
-        --gateway="${LINK_GW}" --aux-address="exclude_host=${LINK_HOSTIP}" \
-        --ip-range="${SET_RANGE}" \
-        -o parent="${LINK}" -o macvlan_mode="bridge" bxc-macvlan
-    fi
+
     for i in $(echo "${read_all_bcode}"|head -n "$len") ; do
         echoinfo "bcode: $i\n"
         only_ins_network_docker_run "${i}" "${email}"
@@ -699,37 +777,6 @@ only_ins_network_choose_plan(){
         2 ) only_ins_network_docker_openwrt ;;
         * ) echowarn "\nno choose(未选择)\n";;
     esac
-}
-_only_network_remove(){
-    docker container stop $(docker ps -a --filter="ancestor=bxc-net:arm64" --format "{{.ID}}")
-    docker container rm $(docker ps -a --filter="ancestor=bxc-net:arm64" --format "{{.ID}}")
-    docker rmi qinghon/bxc-net:arm64 bxc-net:arm64
-    docker network rm bxc-macvlan bxc
-}
-change_net(){
-    if [[ "$PG" == "apt" ]]; then
-        apt -y purge network-manager
-    fi
-    rm /etc/dhcp/dhclient-enter-hooks.d/resolvconf
-    echo -e '#!/bin/sh \nifconfig eth0 mtu 1400 '>/etc/network/if-pre-up.d/mtu
-    chmod +x /etc/network/if-pre-up.d/mtu
-    apt install -y netplug
-}
-ins_kernel_from_armbian(){
-
-    kernel_version=$(uname -r|grep -Eo '([0-9]+\.){2}[0-9]+')
-    if version_ge "$kernel_version 5.0.0" ; then
-        echo "This system kernel version greater than 5.0.0 ,nothing can do"
-        return 
-    fi
-    _device=$(apt list linux-dtb-*|grep linux|awk -F/ '{print $1}')
-    device=${_device:10}
-    # don't run it ,this unverified
-    aptitude remove ~nlinux-dtb ~nlinux-u-boot ~nlinux-image ~nlinux-headers
-    aptitude remove ~nlinux-firmware ~narmbian-firmware ~nlinux-$(lsb_release -cs)-root
-    apt install -y linux-image-dev-${device} linux-dtb-dev-${device} linux-headers-dev-${device}
-    apt install -y linux-u-boot-${device}-dev linux-$(lsb_release -cs)-root-dev-${device}
-    apt-get install armbian-firmware ${device}-tools swconfig a10disp
 }
 ins_kernel(){
     if [[ "${DEVMODEL}" != "Phicomm N1" ]]; then
@@ -777,7 +824,6 @@ ins_kernel(){
     sleep 10
     reboot
 }
-
 _select_interface(){
     if [[  -n $0 ]]; then
         SET_LINK=$1
@@ -787,6 +833,46 @@ _select_interface(){
         log "[error]" "Get interface ${SET_LINK} mac address get error"
         SET_LINK=""
     fi
+}
+set_interfaces_name(){
+    echo -e "手动修改网卡名称为ethx方法 https://jianpengzhang.github.io/2017/04/18/2017041801/"
+
+    read -r -p "是否自动修改网卡名称为ethx,可能会失联,默认否 yes/n:" CHOSE
+    case ${CHOSE} in
+        yes )
+            sed -i 's/^GRUB_CMDLINE_LINUX=/#GRUB_CMDLINE_LINUX=/' /etc/default/grub
+            sed -i '/^GRUB_CMDLINE_LINUX="net.ifnames=0 biosdevname=0" #script/d' /etc/default/grub
+            sed -i '/GRUB_CMDLINE_LINUX=""/a\GRUB_CMDLINE_LINUX="net.ifnames=0 biosdevname=0" #script' /etc/default/grub
+            update-grub2
+            echo -e '# The primary network interface\nallow-hotplug eth0\niface eth0 inet dhcp' >/etc/network/interfaces
+            echo "接下来会重启,准备好了吗?给你10秒,CTRL-C 停止"
+            sync
+            sleep 10
+            reboot
+            ;;
+        * ) return  ;;
+    esac
+    
+}
+only_net_show(){
+    #set -x
+    IDs=$(docker ps -a --filter="ancestor=bxc-op:18.06.2" --format "{{.ID}}")
+    echoerr "Status\t\ttun0 Status\t\tcontainer ID\n"
+    echoinfo "Status\t\ttun0 Status\tIP\t\tMAC address\n"
+    echo "--------------------------------------------------------------------------------"
+    for i in $IDs; do
+        inspect=$(docker container inspect "${i}")
+        Status=$(echo "$inspect"|grep -Po '"Status": "\K.*?(?=")')
+        have_tun0=$(docker exec -i "$i" /bin/sh -c "ip addr show dev >/dev/null 2>&1;echo $?" 2>/dev/null)
+        ipaddress=$(echo "$inspect"|grep -Po '"IPAddress": "\K.*?(?=")')
+        mac_addr=$(echo "$inspect"|grep -Po '"MacAddress": "\K.*?(?=")'|sed -n '2p')
+        if [[ "$Status" == "running" ]]; then
+            echoinfo "${Status}\t\ttun0 run\t${ipaddress}\t${mac_addr}\n"
+        else
+            echoerr "${Status}\t\ttun0 not create${ipaddress}\t${mac_addr}\t${i}\n"
+        fi
+    done
+    #set +x
 }
 mg(){
     echoins(){
@@ -803,28 +889,29 @@ mg(){
     }
     # network check
     network_docker=$(docker images --format "{{.Repository}}"|grep -q bxc-net;echo $?)
-    network_file_have=$([ -s ${BASE_DIR}/bxc-network ] || [ "${network_docker}" -eq 0 ];echo $?)   
+    network_file_have=$([[ -s ${BASE_DIR}/bxc-network || "${network_docker}" -eq 0 ]];echo $?)   
     
     network_progress=$(pgrep bxc-network>/dev/null;echo $?)
-    [[ ${network_progress} -eq 0 ]] &&network_con_id=$(docker ps --filter="ancestor=bxc-net:arm64" --format "{{.ID}}"|head -n 1)
+    [[ ${network_progress} -eq 0 ]] &&network_con_id=$(docker ps --filter="ancestor=bxc-net:$VDIS" --format "{{.ID}}"|head -n 1)
     
     tun0exits=$(ip link show tun0 >/dev/null 2>&1 ;echo $?)
     [[ ${network_file_have} -eq 0 ]] &&tun0exits=$(ip link show tun0 >/dev/null 2>&1 ;echo $?)
     [[ ${network_docker} -eq 0  && -n "${network_con_id}" ]] &&tun0exits=$(docker exec -i "${network_con_id}" /bin/sh -c "ip link show dev tun0>/dev/null;echo $?")
     [[ $network_file_have -ne 0 && -z "${network_con_id}" ]] &&tun0exits=1
 
-    goproxy_progress=$(curl -x "127.0.0.1:8901" https://www.baidu.com -o /dev/null 2>/dev/null;echo $?)
+    goproxy_progress=$(goproxy_check >/dev/null ;echo $?)
     [[ -n "${network_con_id}" ]] &&goproxy_progress=$(docker exec -i "${network_con_id}" /bin/sh -c "pgrep bxc-worker>/dev/null;echo $?")
     # node check
     node_progress=$(pgrep  node>/dev/null;echo $?)
     node_file=$([ -s ${BASE_DIR}/nodeapi/node ];echo $?)
     [ "${node_progress}" -eq 0 ]&&node_version=$(curl -fsS localhost:9017/version|grep -E -o 'v[0-9]\.[0-9]\.[0-9]')
     # k8s check
-    k8s_file=$(check_k8s;echo $?)
+    k8s_file=$(check_k8s >/dev/null;echo $?)
     k8s_progress=$(pgrep kubelet>/dev/null;echo $?)
     [[ $k8s_file -eq 0 ]] &&k8s_version=$(kubelet --version|awk '{print $2}')
+
     #docker check
-    doc_che_ret=$(check_doc;echo $?)
+    doc_che_ret=$(check_doc2 >/dev/null 2>&1 ;echo $?)
     [[ ${doc_che_ret} -ne 1 ]]&& doc_v=$(docker version --format "{{.Server.Version}}")
     #output
     echowarn "\nbxc-network:\n"
@@ -858,11 +945,10 @@ remove(){
     echowarn "Are you sure all remove BonusCloud plugin? yes/n:" ;read -r CHOSE
     case $CHOSE in
         yes )
-            systemctl disable bxc-node
-            rm -rf /opt/bcloud /lib/systemd/system/bxc-node.service $TMP
+            node_remove
+            rm -rf /opt/bcloud  $TMP
             echoinfo "BonusCloud plugin removed"
-            
-            apt remove -y kubelet kubectl kubeadm
+            k8s_remove
             echoinfo "k8s removed"
             echoinfo "see you again!"
             ;;
@@ -882,55 +968,67 @@ displayhelp(){
     echo -e "    -s             Install teleport for remote debugging by developers"
     echo -e "    -c             change kernel to compiled dedicated kernels,only \"Phicomm N1\"" 
     echo -e "                   and is danger!"
+    echo -e "    -e             set interfaces name to ethx"
+    echo -e "    -g             Install network job only"
     echo -e "    -b             bound for command"
     echo -e "    -I Interface   set interface name to you want"
     echo -e "    -S             show Info level output "
     exit 0
 }
-while  getopts "bdiknrsceghI:tS" opt ; do
+
+_SYSARCH=1
+_INIT=0
+_DOCKER_INS=0
+_NODE_INS=0
+_REMOVE=0
+_TELEPORT=0
+_CHANGE_KN=0
+_ONLY_NET=0
+_K8S_INS=0
+_BOUND=0
+_SHOW_STATUS=0
+_SET_ETHX=0
+
+if [[ $# == 0 ]]; then
+    _INIT=1
+    _DOCKER_INS=1
+    _NODE_INS=1
+    _TELEPORT=1
+    _K8S_INS=1
+fi
+
+while  getopts "bdiknrsceghI:tSH" opt ; do
     case $opt in
-        i ) action="init" ;;
-        b ) bound ;exit 0;;
-        d ) action="docker" ;;
-        k ) action="k8s" ;;
-        n ) action="node" ;;
-        r ) action="remove" ;;
-        s ) action="teleport" ;;
-        c ) action="change_kn" ;;
+        i ) _INIT=1 ;;
+        b ) _BOUND=1 ;;
+        d ) _DOCKER_INS=1  ;;
+        k ) _K8S_INS=1 ;;
+        n ) _NODE_INS=1 ;;
+        r ) _REMOVE=1 ;;
+        s ) _TELEPORT=1 ;;
+        e ) _SET_ETHX=1 ;;
         h ) displayhelp ;;
-        t ) mg ;exit 0 ;;
-        g ) action="only_net" ;;
+        t ) _SHOW_STATUS=1 ;;
+        g ) _ONLY_NET=1 ;;
         I ) _select_interface "${OPTARG}" ;;
         S ) DISPLAYINFO="1" ;;
+        H ) _SET_IP_ADDRESS=1 ;;
         ? ) echoerr "Unknow arg. exiting" ;displayhelp; exit 1 ;;
     esac
 done
-echo $action
-case $action in
-    init     ) init ;;
-    docker   ) env_check;ins_docker ;;
-    node     ) node_ins ;;
-    remove   ) remove ;;
-    teleport ) ins_teleport ;;
-    change_kn) ins_kernel ;;
-    only_net ) only_ins_network_choose_plan;;
-    k8s      )
-        env_check
-        ins_k8s
-        ;;
-    * )
-        init
-        ins_docker
-        ins_k8s
-        ins_conf
-        node_ins
-        ins_teleport
-        res=$(verifty;echo $?) 
-        if [[ ${res} -ne 0 ]] ; then
-            log "[error]" "verifty error $res,install fail"
-        else
-            log "[info]" "All install over"
-        fi
-        ;;
-esac
+
+[[ $_SHOW_STATUS -eq 1 && $_ONLY_NET -eq 1 ]] &&_ONLY_NET=0&& _SHOW_STATUS=0&&only_net_show
+[[ $_SYSARCH -eq 1 ]]       &&sysArch 
+[[ $_INIT -eq 1 ]]          &&init
+[[ $_DOCKER_INS -eq 1 ]]    &&env_check;ins_docker
+[[ $_NODE_INS -eq 1 ]]      &&node_ins
+[[ $_TELEPORT -eq 1 ]]      &&ins_teleport
+[[ $_CHANGE_KN -eq 1 ]]     &&ins_kernel
+[[ $_ONLY_NET -eq 1 ]]      &&only_ins_network_choose_plan
+[[ $_K8S_INS -eq 1 ]]       &&ins_k8s
+[[ $_BOUND -eq 1 ]]         &&bound
+[[ $_SET_ETHX -eq 1 ]]      &&set_interfaces_name
+[[ $_SHOW_STATUS -eq 1 ]]   &&mg
+[[ $_REMOVE -eq 1 ]]        &&remove
+
 sync
