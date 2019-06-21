@@ -98,6 +98,23 @@ sysArch(){
     fi
     return 0
 }
+sys_codename(){
+    if  which lsb_release >/dev/null ; then
+        OS_CODENAME=$(lsb_release -cs)
+    fi
+}
+run_as_root(){
+    if [[ $(id -u) -eq 0 ]]; then
+        return 0
+    fi
+    if which sudo >/dev/null ; then
+        echoerr "Please run as sudo:\nsudo bash $0 $1\n"
+    else
+        echoerr "Please run as root user!\n"
+    fi
+    
+    
+}
 env_check(){
     # Detection package manager
     if which apt >/dev/null ; then
@@ -127,7 +144,6 @@ env_check(){
     chmod +x $TMP/screenfetch
     OS_line=$($TMP/screenfetch -n |grep 'OS:')
     OS=$(echo "$OS_line"|awk '{print $3}'|tr '[:upper:]' '[:lower:]')
-    OS_CODENAME=$(echo "$OS_line"|awk '{print $5}'|tr '[:upper:]' '[:lower:]')
     if [[ -z "$OS" ]]; then
         read -r -p "The release version is not detected, please enter it manually,like \"ubuntu\"" OS
     fi
@@ -266,6 +282,11 @@ ins_docker(){
         systemctl enable docker &&systemctl start docker
     fi
 }
+jq_yum_ins(){
+    wget -O $TMP/epel-release-latest-7.noarch.rpm http://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
+    rpm -ivh $TMP/epel-release-latest-7.noarch.rpm
+    yum install -y jq
+}
 ins_jq(){
     if which jq>/dev/null; then
         return
@@ -273,7 +294,7 @@ ins_jq(){
     env_check
     case $PG in
         apt     ) $PG install -y jq ;;
-        yum     ) $PG install -y jq ;;
+        yum     ) jq_yum_ins ;;
         pacman  ) $PG -S jq ;;
     esac
 }
@@ -563,7 +584,7 @@ goproxy_check(){
     return 0
     #set +x
 }
-ins_teleport(){
+teleport_ins(){
     echo "Would you like to install teleprot for remote debugging by developers? "
     echo "If not, the program has problems, you need to solve all the problems you encounter  "
     echo "您是否愿意安装teleport ，供开发人员远程调试."
@@ -573,6 +594,13 @@ ins_teleport(){
         N|n|no|NO ) return ;;
         * ) curl -fSL https://teleport.s3.cn-north-1.jdcloud-oss.com/teleport.sh |bash  ;;
     esac
+}
+teleport_remove(){
+    rm -f /opt/bcloud/teleport
+    systemctl disable teleport
+    systemctl stop teleport
+    rm -f /lib/systemd/system/teleport.service
+    rm -f /etc/systemd/system/teleport.service
 }
 read_bcode_input(){
     echoinfo "Input bcode:";read -r  bcode
@@ -700,7 +728,7 @@ only_ins_network_docker_run(){
     else
         if [[ -z $mac_head ]]; then
             mac_head="$mac_head_tmp"
-            sed -i "s/local mac_head=\"\"/local mac_head=\"${mac_head_tmp}:\"/g" "$0"
+            sed -i "s/local mac_head=\"\"/local mac_head=\"${mac_head_tmp}\"/g" "$0"
         fi
     fi
     echo "--------------------------------------------------------------------------------"
@@ -726,10 +754,9 @@ only_ins_network_docker_openwrt(){
     esac
     docker pull "${image_name}"
     if ! docker images --format "{{.Repository}}"|grep -q 'qinghon/bxc-net' ; then
-        echoerr "pull failed,exit!\n"
+        echoerr "pull failed,exit!,you can try: docker pull ${image_name}\n"
         return 1
     fi
-    set +x
     only_net_set_bridge
     echoinfo "Input bcode:";read -r  bcode
     echoinfo "Input email:";read -r  email
@@ -870,7 +897,7 @@ only_net_show(){
         inspect=$(docker container inspect "${i}")
         Status=$(echo "$inspect"|grep -Po '"Status": "\K.*?(?=")')
         have_tun0=$(docker exec -i "$i" /bin/sh -c "ip addr show dev >/dev/null 2>&1;echo $?" 2>/dev/null)
-        ipaddress=$(echo "$inspect"|grep -Po '"IPAddress": "\K.*?(?=")')
+        ipaddress=$(echo "$inspect"|grep -Po '"IPAddress": "\K.*?(?=")'|head -n 1)
         mac_addr=$(echo "$inspect"|grep -Po '"MacAddress": "\K.*?(?=")'|sed -n '2p')
         if [[ "$Status" == "running" ]]; then
             echoinfo "${Status}\t\ttun0 run\t${ipaddress}\t${mac_addr}\n"
@@ -905,7 +932,7 @@ mg(){
     [[ ${network_docker} -eq 0  && -n "${network_con_id}" ]] &&tun0exits=$(docker exec -i "${network_con_id}" /bin/sh -c "ip link show dev tun0>/dev/null;echo $?")
     [[ $network_file_have -ne 0 && -z "${network_con_id}" ]] &&tun0exits=1
 
-    goproxy_progress=$(goproxy_check >/dev/null ;echo $?)
+    goproxy_progress=$(goproxy_check >/dev/null 2>&1 ;echo $?)
     [[ -n "${network_con_id}" ]] &&goproxy_progress=$(docker exec -i "${network_con_id}" /bin/sh -c "pgrep bxc-worker>/dev/null;echo $?")
     # node check
     node_progress=$(pgrep  node>/dev/null;echo $?)
@@ -953,10 +980,12 @@ remove(){
         yes )
             node_remove
             rm -rf /opt/bcloud  $TMP
-            echoinfo "BonusCloud plugin removed"
+            echoinfo "BonusCloud plugin removed\n"
             k8s_remove
-            echoinfo "k8s removed"
-            echoinfo "see you again!"
+            echoinfo "k8s removed\n"
+            teleport_remove
+            echoinfo "teleport removed\n"
+            echoinfo "see you again!\n"
             ;;
         * ) return ;;
     esac
@@ -1005,30 +1034,30 @@ fi
 
 while  getopts "bdiknrsceghI:tSH" opt ; do
     case $opt in
-        i ) _INIT=1 ;;
-        b ) _BOUND=1 ;;
-        d ) _DOCKER_INS=1  ;;
-        k ) _K8S_INS=1 ;;
-        n ) _NODE_INS=1 ;;
-        r ) _REMOVE=1 ;;
-        s ) _TELEPORT=1 ;;
-        e ) _SET_ETHX=1 ;;
-        h ) displayhelp ;;
-        t ) _SHOW_STATUS=1 ;;
-        g ) _ONLY_NET=1 ;;
+        i ) _INIT=1         ;;
+        b ) _BOUND=1        ;;
+        d ) _DOCKER_INS=1   ;;
+        k ) _K8S_INS=1      ;;
+        n ) _NODE_INS=1     ;;
+        r ) _REMOVE=1       ;;
+        s ) _TELEPORT=1     ;;
+        e ) _SET_ETHX=1     ;;
+        h ) displayhelp     ;;
+        t ) _SHOW_STATUS=1  ;;
+        g ) _ONLY_NET=1     ;;
         I ) _select_interface "${OPTARG}" ;;
         S ) DISPLAYINFO="1" ;;
-        H ) _SET_IP_ADDRESS=1 ;;
+        H ) _SET_IP_ADDRESS=1   ;;
         ? ) echoerr "Unknow arg. exiting" ;displayhelp; exit 1 ;;
     esac
 done
 
-[[ $_SYSARCH -eq 1 ]]       &&sysArch 
+[[ $_SYSARCH -eq 1 ]]       &&sysArch   &&sys_codename  &&run_as_root "$*"
 [[ $_SHOW_STATUS -eq 1 && $_ONLY_NET -eq 1 ]] &&_ONLY_NET=0&& _SHOW_STATUS=0&&only_net_show
 [[ $_INIT -eq 1 ]]          &&init
-[[ $_DOCKER_INS -eq 1 ]]    &&env_check;ins_docker
+[[ $_DOCKER_INS -eq 1 ]]    &&env_check &&ins_docker
 [[ $_NODE_INS -eq 1 ]]      &&node_ins
-[[ $_TELEPORT -eq 1 ]]      &&ins_teleport
+[[ $_TELEPORT -eq 1 ]]      &&teleport_ins
 [[ $_CHANGE_KN -eq 1 ]]     &&ins_kernel
 [[ $_ONLY_NET -eq 1 ]]      &&only_ins_network_choose_plan
 [[ $_K8S_INS -eq 1 ]]       &&ins_k8s
