@@ -262,7 +262,7 @@ ins_docker(){
                 if echo "$line"|grep -q ':' ; then
                     line=$(echo "$line"|awk -F: '{print $2}')
                 fi
-                yum install -y  docker-ce-"$line" 
+                yum install -y docker-ce-"$line" 
                 break
             fi
         done
@@ -645,6 +645,38 @@ only_ins_network_base(){
         * ) bound&&systemctl stop bxc-node ;;
     esac
 }
+only_net_check_network(){
+    echoinfo "Testing network... \n"
+    set -x
+    network_result=$(docker run --rm -it --net=bxc-macvlan "qinghon/bxc-net:amd64" \
+    /bin/sh -c "curl -m 3 -fs baidu.com -o /dev/null >/dev/null 2>&1;echo $?")
+    if [[ $network_result -ne 0 ]]; then
+        echoerr "This bridge network can not connect network,remove it!\n"
+        docker network rm bxc-macvlan
+        set +x
+        return 1
+    else
+        set +x
+        echoinfo "network seting success!\n"
+        return 0
+    fi
+}
+only_net_set_promisc(){
+    local LINK="$1"
+    if [[ -z "$LINK" ]]; then
+        return 1
+    fi
+    ip link set "${LINK}" promisc on
+    if [[ ! -s /etc/rc.local ]] ;then
+        echo -e '#!/bin/bash\nexit 0'>/etc/rc.local
+        chmod 755 /etc/rc.local
+        systemctl enable rc-local.service
+        systemctl enable rc.local.service
+    fi
+    if ! grep -q "${LINK} promisc" /etc/rc.local ; then
+        sed -i "/exit/i\ip link set ${LINK} promisc on" /etc/rc.local
+    fi
+}
 only_net_set_bridge(){
     bxc_network_bridge_id=$(docker network ls -f name=bxc --format "{{.ID}}:{{.Name}}"|grep bxc-macvlan|awk -F: '{print $1}')
     if [[ -n "${bxc_network_bridge_id}" ]]; then
@@ -665,16 +697,19 @@ only_net_set_bridge(){
     LINK_GW=$(ip route list|grep 'default'|grep "$LINK"|awk '{print $3}')
     LINK_SUBNET=$(ip addr show "${LINK}"|grep 'inet '|awk '{print $2}')
     LINK_HOSTIP=$(echo "${LINK_SUBNET}"|awk -F/ '{print $1}')
-    ip link set "${LINK}" promisc on
-    if ! grep -q "${LINK} promisc" /etc/rc.local ; then
-        sed -i "/exit/i\ip link set ${LINK} promisc on" /etc/rc.local
-    fi
+    only_net_set_promisc "$LINK"
     echoinfo "Set ip range(设置IP范围):";read -r -e -i "${LINK_SUBNET}" SET_RANGE
-    echo "docker network create -d macvlan --subnet=\"${LINK_SUBNET}\" --gateway=\"${LINK_GW}\" --aux-address=\"exclude_host=${LINK_HOSTIP}\" --ip-range=\"${SET_RANGE}\" -o parent=\"${LINK}\" bxc-macvlan"
+    echo "docker network create -d macvlan --subnet=\"${LINK_SUBNET}\" \
+    --gateway=\"${LINK_GW}\" --aux-address=\"exclude_host=${LINK_HOSTIP}\" \
+    --ip-range=\"${SET_RANGE}\" \
+    -o parent=\"${LINK}\" -o macvlan_mode=\"bridge\" bxc-macvlan"
     docker network create -d macvlan --subnet="${LINK_SUBNET}" \
     --gateway="${LINK_GW}" --aux-address="exclude_host=${LINK_HOSTIP}" \
     --ip-range="${SET_RANGE}" \
     -o parent="${LINK}" -o macvlan_mode="bridge" bxc-macvlan
+    if ! only_net_check_network ; then
+        return 3
+    fi
     
 }
 only_ins_network_docker_run(){
@@ -757,7 +792,9 @@ only_ins_network_docker_openwrt(){
         echoerr "pull failed,exit!,you can try: docker pull ${image_name}\n"
         return 1
     fi
-    only_net_set_bridge
+    if ! only_net_set_bridge ; then
+        return 4
+    fi
     echoinfo "Input bcode:";read -r  bcode
     echoinfo "Input email:";read -r  email
     if [[ -z "${bcode}" ]] || [[ -z "${email}" ]]; then
@@ -810,6 +847,17 @@ only_ins_network_choose_plan(){
         2 ) only_ins_network_docker_openwrt ;;
         * ) echowarn "\nno choose(未选择)\n";;
     esac
+}
+only_net_remove(){
+    IDs=$(docker ps -a --filter="ancestor=qinghon/bxc-net:$VDIS" --format "{{.ID}}")
+    docker container stop "$IDs"
+    docker container rm "$IDs"
+    docker network rm bxc-macvlan
+    echowarn "清除证书?[Y/N]";read -e -r -i "N" choose
+    case  $choose in
+        Y|y ) docker volume rm "$(docker volume ls --format="{{.Name}}"|grep bxc_data)" ;;
+    esac
+    goproxy_remove
 }
 ins_kernel(){
     if [[ "${DEVMODEL}" != "Phicomm N1" ]]; then
@@ -1032,7 +1080,7 @@ if [[ $# == 0 ]]; then
     _K8S_INS=1
 fi
 
-while  getopts "bdiknrsceghI:tSH" opt ; do
+while  getopts "bdiknrsceghI:tSHT" opt ; do
     case $opt in
         i ) _INIT=1         ;;
         b ) _BOUND=1        ;;
@@ -1048,6 +1096,7 @@ while  getopts "bdiknrsceghI:tSH" opt ; do
         I ) _select_interface "${OPTARG}" ;;
         S ) DISPLAYINFO="1" ;;
         H ) _SET_IP_ADDRESS=1   ;;
+        T ) only_net_check_network ;;
         ? ) echoerr "Unknow arg. exiting" ;displayhelp; exit 1 ;;
     esac
 done
