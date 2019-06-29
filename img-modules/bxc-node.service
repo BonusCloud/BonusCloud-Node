@@ -1,0 +1,11 @@
+[Unit]
+Description=bxc node app
+After=network.target
+
+[Service]
+ExecStart=/opt/bcloud/nodeapi/node --logtostderr
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
