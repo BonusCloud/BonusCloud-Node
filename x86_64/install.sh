@@ -315,7 +315,7 @@ ins_conf(){
 
 _set_node_systemd(){
     if [[ -z "${SET_LINK}" ]]; then
-        INSERT_STR="#--intf ${DEFAULT_LINK}"
+        INSERT_STR="--intf ${DEFAULT_LINK}"
     else
         INSERT_STR="--intf ${SET_LINK}"
     fi
@@ -501,40 +501,6 @@ goproxy_check(){
     fi
 }
 
-ins_salt(){
-    
-    if ! which salt-minion>/dev/null  ;then
-        curl -fSL https://bootstrap.saltstack.com |bash -s -P stable 2019.2.0
-    fi
-    if [[ "${DEVMODEL}" == '' ]]; then
-        DEVMODEL="x86_64"
-    fi
-    if [[ -z "${MACADDR}" ]]; then
-        ID_STR="id: ${DEVMODEL}_${DEFAULT_MACADDR}"
-    else
-        ID_STR="id: ${DEVMODEL}_${MACADDR}"
-    fi
-    cat <<EOF >/etc/salt/minion
-master: nodemaster.bxcearth.com
-master_port: 14506
-user: root
-log_level: quiet
-${ID_STR}
-EOF
-    rm /var/lib/salt/pki/minion/minion_master.pub 2>/dev/null
-    systemctl restart salt-minion
-}
-ins_salt_check(){
-    echo "Would you like to install salt-minion for remote debugging by developers? "
-    echo "If not, the program has problems, you need to solve all the problems you encounter  "
-    echo "您是否愿意安装salt-minion ，供开发人员远程调试."
-    echo "如果否，程序出了问题，您需要自己解决所有遇到的问题，默认YES"
-    read -r -p "[Default YES/N]:" choose
-    case $choose in
-        N|n|no|NO ) return ;;
-        * ) ins_salt ;;
-    esac
-}
 read_bcode_input(){
     echoinfo "Input bcode:";read -r  bcode
     echoinfo "Input email:";read -r  email
@@ -747,7 +713,6 @@ displayhelp(){
     echo -e "                   BonusCloud depends on"
     echo -e "    -n             Install node management components"
     echo -e "    -r             Fully remove bonuscloud plug-ins and components"
-    echo -e "    -s             Install salt-minion for remote debugging by developers"
     echo -e "    -c             change kernel to compiled dedicated kernels,only \"Phicomm N1\"" 
     echo -e "                   and is danger!"
     echo -e "    -e             set interfaces name to ethx"
@@ -756,7 +721,7 @@ displayhelp(){
     echo -e "    -S             Don'n show Info level output "
     exit 0
 }
-while  getopts "bdiknrstceghDI:TS" opt ; do
+while  getopts "bdiknrtceghDI:TS" opt ; do
     case $opt in
         i ) action="init" ;;
         b ) bound ;exit 0;;
@@ -764,7 +729,6 @@ while  getopts "bdiknrstceghDI:TS" opt ; do
         k ) action="k8s" ;;
         n ) action="node" ;;
         r ) action="remove" ;;
-        s ) action="salt" ;;
         c ) action="change_kn" ;;
         e ) action="set_ethx" ;;
         g ) action="only_net" ;;
@@ -783,7 +747,6 @@ case $action in
     docker   ) env_check;ins_docker ;;
     node     ) node_ins ;;
     remove   ) remove ;;
-    salt     ) ins_salt ;;
     change_kn) ins_kernel ;;
     set_ethx ) set_interfaces_name ;;
     only_net ) only_ins_network_choose_plan;;
@@ -797,7 +760,6 @@ case $action in
         ins_k8s
         ins_conf
         node_ins
-        ins_salt_check
         res=$(verifty;echo $?) 
         if [[ ${res} -ne 0 ]] ; then
             log "[error]" "verifty error $res,install fail"
