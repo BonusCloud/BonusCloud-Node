@@ -319,7 +319,7 @@ _set_node_systemd(){
     else
         INSERT_STR="--intf ${SET_LINK}"
     fi
-    if [[ "${DISPLAYINFO}" == "1" ]]; then
+    if [[ "${DEV_OFF}" == "1" ]]; then
 	    INSERT_STR="${INSERT_STR} --dev_off"
     fi
     cat <<EOF >/lib/systemd/system/bxc-node.service
