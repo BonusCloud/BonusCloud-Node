@@ -320,7 +320,7 @@ _set_node_systemd(){
         INSERT_STR="--intf ${SET_LINK}"
     fi
     if [[ "${DEV_OFF}" == "1" ]]; then
-	    INSERT_STR="${INSERT_STR} --dev_off"
+	    INSERT_STR="${INSERT_STR} --devoff"
     fi
     cat <<EOF >/lib/systemd/system/bxc-node.service
 [Unit]
