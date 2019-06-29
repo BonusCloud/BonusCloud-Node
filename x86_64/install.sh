@@ -756,7 +756,7 @@ displayhelp(){
     echo -e "    -S             Don'n show Info level output "
     exit 0
 }
-while  getopts "bdiknrstceghI:TS" opt ; do
+while  getopts "bdiknrstceghDI:TS" opt ; do
     case $opt in
         i ) action="init" ;;
         b ) bound ;exit 0;;
