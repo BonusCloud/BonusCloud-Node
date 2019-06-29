@@ -16,6 +16,7 @@ DEVMODEL=$(cat /proc/device-tree/model 2>/dev/null |tr -d '\0')
 DEFAULT_LINK=$(ip route list|grep 'default'|head -n 1|awk '{print $5}')
 DEFAULT_MACADDR=$(ip link show "${DEFAULT_LINK}"|grep 'ether'|awk '{print $2}')
 SET_LINK=""
+DEV_OFF=""
 MACADDR=""
 
 TMP="tmp"
@@ -317,6 +318,9 @@ _set_node_systemd(){
         INSERT_STR="#--intf ${DEFAULT_LINK}"
     else
         INSERT_STR="--intf ${SET_LINK}"
+    fi
+    if [[ "${DISPLAYINFO}" == "1" ]]; then
+	    INSERT_STR="${INSERT_STR} --dev_off"
     fi
     cat <<EOF >/lib/systemd/system/bxc-node.service
 [Unit]
@@ -766,6 +770,7 @@ while  getopts "bdiknrstceghI:TS" opt ; do
         g ) action="only_net" ;;
         h ) displayhelp ;;
         t ) mg ;exit 0 ;;
+        D ) DEV_OFF="1" ;;
         T ) bxc-network_ins;exit 0 ;;
         I ) _select_interface "${OPTARG}" ;;
         S ) DISPLAYINFO="0" ;;
