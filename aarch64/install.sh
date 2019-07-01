@@ -2,6 +2,7 @@
 
 #https://github.com/BonusCloud/BonusCloud-Node/issues
 #Author qinghon https://github.com/qinghon
+
 OS=""
 OS_CODENAME=""
 PG=""
@@ -24,6 +25,7 @@ SET_LINK=""
 MACADDR=""
 
 TMP="tmp"
+mkdir -p $TMP
 LOG_FILE="ins.log"
 
 K8S_LOW="1.12.3"
@@ -41,9 +43,7 @@ mirror_pods=(
     "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master"
     "https://raw.githubusercontent.com/qinghon/BonusCloud-Node/master"
 )
-mkdir -p $TMP
-DISPLAYINFO="0"
-_SET_IP_ADDRESS=0
+
 
 echoerr(){
     printf "\033[1;31m$1\033[0m"
@@ -109,11 +109,11 @@ run_as_root(){
     fi
     if which sudo >/dev/null ; then
         echoerr "Please run as sudo:\nsudo bash $0 $1\n"
+        exit 1
     else
         echoerr "Please run as root user!\n"
+        exit 2
     fi
-    
-    
 }
 env_check(){
     # Detection package manager
@@ -157,7 +157,7 @@ env_check(){
 down(){
     for link in "${mirror_pods[@]}"; do
         
-        if wget -nv "${link}/$1" -O "$2" ; then
+        if wget "${link}/$1" -O "$2" ; then
             break
         else
             continue
@@ -389,13 +389,16 @@ _set_node_systemd(){
     else
         INSERT_STR="--intf ${SET_LINK}"
     fi
+    if [[ ${_DON_SET_DISK} -eq 1 ]]; then
+        DON_SET_DISK="--devoff"
+    fi
     cat <<EOF >/lib/systemd/system/bxc-node.service
 [Unit]
 Description=bxc node app
 After=network.target
 
 [Service]
-ExecStart=/opt/bcloud/nodeapi/node --alsologtostderr ${INSERT_STR}
+ExecStart=/opt/bcloud/nodeapi/node --alsologtostderr ${INSERT_STR} ${DON_SET_DISK}
 Restart=always
 RestartSec=10
 
@@ -707,9 +710,6 @@ only_net_set_bridge(){
     --gateway="${LINK_GW}" --aux-address="exclude_host=${LINK_HOSTIP}" \
     --ip-range="${SET_RANGE}" \
     -o parent="${LINK}" -o macvlan_mode="bridge" bxc-macvlan
-    if ! only_net_check_network ; then
-        return 3
-    fi
     
 }
 only_ins_network_docker_run(){
@@ -1039,25 +1039,76 @@ remove(){
     esac
 
 }
+
+en_us_help=(
+"bash $0 [option]    "
+"    -h             Print this and exit"
+"     └── -L        Specify help language,like \"-h -L zh_cn\""
+"    -b             bound for command"
+"    -d             Only install docker"
+"    -c             change kernel to compiled dedicated kernels,only \"Phicomm N1\"" 
+"                   and is danger!"
+"    -i             Installation environment check and initialization"
+"    -k             Install the k8s environment and the k8s components that" 
+"                   BonusCloud depends on"
+"    -n             Only install node management components "
+"    -r             Fully remove bonuscloud plug-ins and components"
+"    -s             Install teleport for remote debugging by developers"
+"    -t             Show all plugin running status"
+"    -e             Set interfaces name to ethx,only x86_64 and using grub"
+"    -g             Install network job only"
+"     └── -H        Set ip for container"
+"    -D             Don't set disk for node program"
+"    -I Interface   set interface name to you want"
+"    -S             show Info level output"
+" "
+"When no parameters are added, the calculation task component is installed "
+"by default. If the parameter \"only install\" is added, the corresponding "
+"component will be installed.")
+zh_cn_help=(
+"bash $0 [选项]    "
+"    -h             打印此帮助并退出"
+"     └── -L        指定帮助语言,如\"-h -L zh_cn\" "
+"    -b             命令行绑定"
+"    -d             仅安装Docker程序"
+"    -c             安装定制内核,仅支持\"Phicomm N1\""
+"    -i             仅初始化"
+"    -k             仅安装k8s组件"
+"    -n             安装node组件"
+"    -r             清除所有安装的相关程序"
+"    -s             仅安装teleport远程调试程序,默认安装"
+"    -t             显示各组件运行状态"
+"    -e             设置网卡名称为ethx格式,仅支持使用grub的x86设备"
+"    -g             仅安装网络任务"
+"     └── -H        网络容器指定IP"
+"    -D             不初始化外挂硬盘"
+"    -I Interface   指定安装时使用的网卡"
+"    -S             显示Info等级日志"
+" "
+"不加参数时,默认安装计算任务组件,如加了\"仅安装..\"等参数时将安装对应组件")
+
 displayhelp(){
     echo -e "\033[2J"
-    echo "bash $0 [option]" 
-    echo -e "    -h             Print this and exit"
-    echo -e "    -i             Installation environment check and initialization"
-    echo -e "    -k             Install the k8s environment and the k8s components that" 
-    echo -e "                   BonusCloud depends on"
-    echo -e "    -n             Install node management components"
-    echo -e "    -r             Fully remove bonuscloud plug-ins and components"
-    echo -e "    -s             Install teleport for remote debugging by developers"
-    echo -e "    -c             change kernel to compiled dedicated kernels,only \"Phicomm N1\"" 
-    echo -e "                   and is danger!"
-    echo -e "    -e             set interfaces name to ethx"
-    echo -e "    -g             Install network job only"
-    echo -e "    -b             bound for command"
-    echo -e "    -I Interface   set interface name to you want"
-    echo -e "    -S             show Info level output "
+    case $_LANG in
+        zh_CN.UTF-8|zh_cn )
+            for i in "${!zh_cn_help[@]}"; do
+                help_arr[$i]="${zh_cn_help[$i]}"
+            done 
+            ;;
+        *           )
+            for i in "${!en_us_help[@]}"; do
+                help_arr[$i]="${en_us_help[$i]}"
+            done
+            ;;
+    esac
+    for i in "${!help_arr[@]}"; do
+        printf "${help_arr[$i]}\n"
+    done
     exit 0
 }
+
+DISPLAYINFO="0"
+_LANG="${LANG}"
 
 _SYSARCH=1
 _INIT=0
@@ -1071,6 +1122,9 @@ _K8S_INS=0
 _BOUND=0
 _SHOW_STATUS=0
 _SET_ETHX=0
+_DON_SET_DISK=0
+_SET_IP_ADDRESS=0
+_SHOW_HELP=0
 
 if [[ $# == 0 ]]; then
     _INIT=1
@@ -1080,31 +1134,33 @@ if [[ $# == 0 ]]; then
     _K8S_INS=1
 fi
 
-while  getopts "bdiknrsceghI:tSHT" opt ; do
+while  getopts "bdiknrstceghI:DSHL:" opt ; do
     case $opt in
         i ) _INIT=1         ;;
         b ) _BOUND=1        ;;
+        c ) _CHANGE_KN=1    ;;
         d ) _DOCKER_INS=1   ;;
         k ) _K8S_INS=1      ;;
         n ) _NODE_INS=1     ;;
         r ) _REMOVE=1       ;;
         s ) _TELEPORT=1     ;;
         e ) _SET_ETHX=1     ;;
-        h ) displayhelp     ;;
         t ) _SHOW_STATUS=1  ;;
         g ) _ONLY_NET=1     ;;
+        D ) _DON_SET_DISK=1 ;;
         I ) _select_interface "${OPTARG}" ;;
         S ) DISPLAYINFO="1" ;;
         H ) _SET_IP_ADDRESS=1   ;;
-        T ) only_net_check_network ;;
+        L ) _LANG="${OPTARG}"   ;;
+        h ) _SHOW_HELP=1    ;;
         ? ) echoerr "Unknow arg. exiting" ;displayhelp; exit 1 ;;
     esac
 done
-
+[[ $_SHOW_HELP -eq 1 ]]     &&displayhelp
 [[ $_SYSARCH -eq 1 ]]       &&sysArch   &&sys_codename  &&run_as_root "$*"
 [[ $_SHOW_STATUS -eq 1 && $_ONLY_NET -eq 1 ]] &&_ONLY_NET=0&& _SHOW_STATUS=0&&only_net_show
 [[ $_INIT -eq 1 ]]          &&init
-[[ $_DOCKER_INS -eq 1 ]]    &&env_check &&ins_docker
+[[ $_DOCKER_INS -eq 1 ]]    &&ins_docker
 [[ $_NODE_INS -eq 1 ]]      &&node_ins
 [[ $_TELEPORT -eq 1 ]]      &&teleport_ins
 [[ $_CHANGE_KN -eq 1 ]]     &&ins_kernel
