@@ -186,7 +186,7 @@ check_info(){
 }
 ins_docker(){
     ret=$(check_doc)
-    if [[ $(ret) -eq 0 || ${ret} -eq 2 ]]   ; then
+    if [[ ${ret} -eq 0 || ${ret} -eq 2 ]]   ; then
         log "[info]" "docker was found! skiped"
         return 0
     fi
