@@ -1,13 +1,14 @@
 
 [简体中文](README_zh.md)
+
 ### install
 Run as shell
 ```
-wget https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/x86_64/install.sh -O install.sh&&sudo bash install.sh
+wget https://raw.githubusercontent.com/qinghon/BonusCloud-Node/master/x86_64/install.sh -O install.sh&&sudo bash install.sh
 ```
 ### remove
 ```
-wget https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/x86_64/install.sh -O install.sh&&sudo bash install.sh remove
+wget https://raw.githubusercontent.com/qinghon/BonusCloud-Node/master/x86_64/install.sh -O install.sh&&sudo bash install.sh remove
 ```
 
 The system passed the test
@@ -28,7 +29,7 @@ or use APP
                    BonusCloud depends on
     -n             Install node management components
     -r             Fully remove bonuscloud plug-ins and components
-    -s             Install salt-minion for remote debugging by developers
+    -s             Install teleport for remote debugging by developers
     -t             Display process running status and installation status
     -e             set interfaces name to ethx
     -g             Install network job only
