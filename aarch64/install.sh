@@ -678,14 +678,14 @@ only_ins_network_base(){
 }
 only_net_check_network(){
     echoinfo "Testing network... \n"
-    network_result=$(docker run --rm -it --net=bxc-macvlan "qinghon/bxc-net:$VDIS" \
+    network_result=$(docker run --rm -it --net=bxc1 "qinghon/bxc-net:$VDIS" \
     /bin/sh -c "curl -m 3 -fs baidu.com -o /dev/null >/dev/null 2>&1";echo $?)
     if [[ $network_result -ne 0 ]]; then
         echoerr "This bridge network can not connect network,curl return $network_result\n"
         read -r -e -p "Delete this network?:" -i "Y" -t 5 choose
         choose=${choose:-"Y"}
         case $choose in
-            Y|y ) docker network rm bxc-macvlan &&echoerr "\nDelete success\n";;
+            Y|y ) docker network rm bxc1 &&echoerr "\nDelete success\n";;
             *   ) echoerr "\nCancel!\n";;
         esac
         return 1
@@ -714,7 +714,7 @@ only_net_set_promisc(){
 }
 only_net_set_bridge(){
     # 设置macvlan桥接网络
-    bxc_network_bridge_id=$(docker network ls -f name=bxc --format "{{.ID}}:{{.Name}}"|grep bxc-macvlan|awk -F: '{print $1}')
+    bxc_network_bridge_id=$(docker network ls -f name=bxc --format "{{.ID}}:{{.Name}}"|grep -E 'bxc-macvlan|bxc1'|awk -F: '{print $1}')
     if [[ -n "${bxc_network_bridge_id}" ]]; then
         return 0
     fi
@@ -738,11 +738,11 @@ only_net_set_bridge(){
     echo "docker network create -d macvlan --subnet=\"${LINK_SUBNET}\" \
     --gateway=\"${LINK_GW}\" --aux-address=\"exclude_host=${LINK_HOSTIP}\" \
     --ip-range=\"${SET_RANGE}\" \
-    -o parent=\"${LINK}\" -o macvlan_mode=\"bridge\" bxc-macvlan"
+    -o parent=\"${LINK}\" -o macvlan_mode=\"bridge\" bxc1"
     docker network create -d macvlan --subnet="${LINK_SUBNET}" \
     --gateway="${LINK_GW}" --aux-address="exclude_host=${LINK_HOSTIP}" \
     --ip-range="${SET_RANGE}" \
-    -o parent="${LINK}" -o macvlan_mode="bridge" bxc-macvlan
+    -o parent="${LINK}" -o macvlan_mode="bridge" bxc1
     # 检验网卡通不通
     if ! only_net_check_network ; then
         return 3
@@ -766,9 +766,11 @@ generate_mac_addr(){
     fi
 }
 run_command(){
+    #log '[info]' "$1"
     $1
     return $?
 }
+
 only_ins_network_docker_run(){
     bcode="$1"
     email="$2"
@@ -782,11 +784,6 @@ only_ins_network_docker_run(){
         generate_mac_addr
     fi
     mac_head_tmp=$(echo "$mac_addr"|awk -F: '{print $1,$2}'|sed 's/ /:/g')
-    command="docker run -d --cap-add=NET_ADMIN --net=bxc-macvlan $set_ipaddress --device /dev/net/tun --restart=always \
-        --sysctl net.ipv6.conf.all.disable_ipv6=0 --mac-address=$mac_addr \
-        -e bcode=${bcode} -e email=${email} --name=bxc-${bcode} \
-        -v bxc_data_${bcode}:/opt/bcloud \
-        ${image_name}"
     # -H 选项 设置静态IP
     if [[ $_SET_IP_ADDRESS -eq 1 ]]; then
         local set_ipaddress
@@ -796,6 +793,18 @@ only_ins_network_docker_run(){
     else
         set_ipaddress=''
     fi
+    # 选择新旧网卡名
+    local network_name
+    if docker network ls -f name=bxc --format "{{.Name}}"|grep -q 'bxc1'; then
+        network_name="--net=bxc1"
+    else
+        network_name="--net=bxc-macvlan"
+    fi
+    command="docker run -d --cap-add=NET_ADMIN $network_name $set_ipaddress --mac-address=$mac_addr \
+        --sysctl net.ipv6.conf.all.disable_ipv6=0 --device /dev/net/tun --restart=always  \
+        -e bcode=${bcode} -e email=${email} --name=bxc-${bcode} \
+        -v bxc_data_${bcode}:/opt/bcloud \
+        ${image_name}"
     # 运行命令
     con_id=$(run_command "$command")
     if [[ -z $con_id ]]; then
@@ -1068,15 +1077,17 @@ _show_info(){
     num=$2
     ID="$3"
     have_tun0=$4
-    ip_mac="$5"
+    ip_addr="$5"
+    mac_addr="$6"
     if [[ "$Status" != "running" || $have_tun0 -ne 0 ]]; then
         echoerr "${num}  ${Status}\ttun0 not create\t$ID\t\t${mac_addr}\t\n"
     else
-        echoinfo "${num}  ${Status}\t\ttun0 run\t${ip_mac}\n"
+        echoinfo "${num}  ${Status}\t\ttun0 run\t${ip_addr}\t${mac_addr}\n"
     fi
 }
 only_net_show(){
     # 显示单网络任务的所有容器
+    ins_jq
     IDs=$(docker ps -a --filter="ancestor=qinghon/bxc-net:$VDIS" --format "{{.ID}}")
     echoerr  "num Status\ttun0 Status\tcontainer ID\t\tMAC\n"
     echoinfo "num Status\t\ttun0 Status\tIP\t\tMAC address\n"
@@ -1088,22 +1099,30 @@ only_net_show(){
     run_num=0
     fail_num=0
     for i in $IDs; do
-        Status=$(docker container inspect "$i" --format "{{.State.Status}}")
+        con_info=$(docker container inspect "$i")
+        Status=$(echo "$con_info"|jq -r '.[]|.State.Status')
         if [[ "$Status" != "running" ]]; then
             fail_num=$(($fail_num+1))
             _show_info "$Status" "$fail_num" "$i" "1" "" ""
             continue
         fi
         have_tun0=$(docker exec -it "$i" /bin/sh -c 'ip addr show dev tun0 >/dev/null 2>&1' 2>/dev/null;echo $?)
-        ip_mac=$(docker container inspect "$i" --format "{{with index .NetworkSettings.Networks \"bxc-macvlan\"}}{{.IPAddress}}\t{{.MacAddress}}{{end}}"  2>/dev/null)
+        network_name=$(echo "$con_info"|jq -r '.[]|.NetworkSettings.Networks|to_entries|.[]|.key')
+        if [[ "$network_name" == "bxc1" ]]; then
+            ip_addr=$(echo "$con_info"|jq -r '.[]|.NetworkSettings.Networks.bxc1.IPAddress')
+            mac_addr=$(echo "$con_info"|jq -r '.[]|.NetworkSettings.Networks.bxc1.MacAddress')
+        else
+            ip_addr=$(echo "$con_info"|jq -r '.[]|.NetworkSettings.Networks."bxc-macvlan".IPAddress')
+            mac_addr=$(echo "$con_info"|jq -r '.[]|.NetworkSettings.Networks."bxc-macvlan".MacAddress')
+        fi 
 
         if [[ $have_tun0 -ne 0 ]] ; then
             fail_num=$(($fail_num+1))
-            _show_info "$Status" "$fail_num" "$i" "$have_tun0" "$ip_mac"
+            _show_info "$Status" "$fail_num" "$i" "$have_tun0" "$ip_addr" "$mac_addr"
             continue
         fi
         run_num=$(($run_num+1))
-        _show_info "$Status" "$run_num" "$i" "$have_tun0" "$ip_mac"
+        _show_info "$Status" "$run_num" "$i" "$have_tun0" "$ip_addr" "$mac_addr"
     done
     echo-
     echoinfo "${run_num} running\t\t"
