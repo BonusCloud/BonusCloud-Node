@@ -284,6 +284,7 @@ ins_docker(){
         log "[error]" "package manager ${PG} not support "
         return 1
     fi
+    usermod -aG docker $USER
     systemctl enable docker.service
     systemctl start docker.service
     check_doc
@@ -316,7 +317,7 @@ ins_jq(){
 }
 init(){
     # 初始化目录/文件
-    echo >$LOG_FILE
+    printf "">$LOG_FILE
     if ! systemctl enable ntp  >/dev/null 2>&1 ; then
         timedatectl set-ntp true
     else
@@ -1062,10 +1063,22 @@ set_interfaces_name(){
     esac
     
 }
+_show_info(){
+    Status="$1"
+    num=$2
+    ID="$3"
+    have_tun0=$4
+    ip_mac="$5"
+    if [[ "$Status" != "running" || $have_tun0 -ne 0 ]]; then
+        echoerr "${num}  ${Status}\ttun0 not create\t$ID\t\t${mac_addr}\t\n"
+    else
+        echoinfo "${num}  ${Status}\t\ttun0 run\t${ip_mac}\n"
+    fi
+}
 only_net_show(){
     # 显示单网络任务的所有容器
     IDs=$(docker ps -a --filter="ancestor=qinghon/bxc-net:$VDIS" --format "{{.ID}}")
-    echoerr  "num Status\t\ttun0 Status\t\tcontainer ID\n"
+    echoerr  "num Status\ttun0 Status\tcontainer ID\t\tMAC\n"
     echoinfo "num Status\t\ttun0 Status\tIP\t\tMAC address\n"
     echo-
     local LFS_tmp=$LFS
@@ -1076,16 +1089,21 @@ only_net_show(){
     fail_num=0
     for i in $IDs; do
         Status=$(docker container inspect "$i" --format "{{.State.Status}}")
-        have_tun0=$(docker exec -i "$i" /bin/sh -c "ip addr show dev >/dev/null 2>&1" 2>/dev/null;echo $?)
-        ipaddress=$(docker container inspect "$i" --format "{{.NetworkSettings.Networks.bxc-macvlan.IPAddress}}"  2>/dev/null)
-        mac_addr=$(docker  container inspect "$i" --format "{{.NetworkSettings.Networks.bxc-macvlan.MacAddress}}" 2>/dev/null)
-        if [[ "$Status" == "running" && "${have_tun0}" -eq 0 ]]; then
-            run_num=$(($run_num+1))
-            echoinfo "${run_num}  ${Status}\t\ttun0 run\t${ipaddress}\t${mac_addr}\n"
-        else
+        if [[ "$Status" != "running" ]]; then
             fail_num=$(($fail_num+1))
-            echoerr  "${fail_num}  ${Status}\t\ttun0 not create${ipaddress}\t${mac_addr}\t$i\n"
+            _show_info "$Status" "$fail_num" "$i" "1" "" ""
+            continue
         fi
+        have_tun0=$(docker exec -it "$i" /bin/sh -c 'ip addr show dev tun0 >/dev/null 2>&1' 2>/dev/null;echo $?)
+        ip_mac=$(docker container inspect "$i" --format "{{with index .NetworkSettings.Networks \"bxc-macvlan\"}}{{.IPAddress}}\t{{.MacAddress}}{{end}}"  2>/dev/null)
+
+        if [[ $have_tun0 -ne 0 ]] ; then
+            fail_num=$(($fail_num+1))
+            _show_info "$Status" "$fail_num" "$i" "$have_tun0" "$ip_mac"
+            continue
+        fi
+        run_num=$(($run_num+1))
+        _show_info "$Status" "$run_num" "$i" "$have_tun0" "$ip_mac"
     done
     echo-
     echoinfo "${run_num} running\t\t"
