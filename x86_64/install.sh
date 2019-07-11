@@ -1290,6 +1290,7 @@ _LANG="${LANG}"
 
 _SYSARCH=1
 _INIT=0
+_NET_CONF=0
 _DOCKER_INS=0
 _NODE_INS=0
 _REMOVE=0
@@ -1310,6 +1311,7 @@ if [[ $# == 0 ]]; then
     _NODE_INS=1
     _TELEPORT=1
     _K8S_INS=1
+    _NET_CONF=1
 fi
 
 while  getopts "bdiknrstceghI:DSHL:" opt ; do
@@ -1347,6 +1349,7 @@ done
 [[ $_CHANGE_KN -eq 1 ]]     &&ins_kernel
 [[ $_ONLY_NET -eq 1 ]]      &&only_ins_network_choose_plan
 [[ $_K8S_INS -eq 1 ]]       &&ins_k8s
+[[ $_NET_CONF -eq 1 ]]      &&ins_conf
 [[ $_BOUND -eq 1 ]]         &&bound
 [[ $_SET_ETHX -eq 1 ]]      &&set_interfaces_name
 [[ $_SHOW_STATUS -eq 1 ]]   &&mg
