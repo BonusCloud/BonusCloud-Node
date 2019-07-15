@@ -2,28 +2,31 @@
 
 #https://github.com/BonusCloud/BonusCloud-Node/issues
 #Author qinghon https://github.com/qinghon
+
 OS=""
 OS_CODENAME=""
 PG=""
 ARCH=""
 VDIS=""
 BASE_DIR="/opt/bcloud"
-BOOTCONFIG="$BASE_DIR/scripts/bootconfig"
 NODE_INFO="$BASE_DIR/node.db"
 SSL_CA="$BASE_DIR/ca.crt"
 SSL_CRT="$BASE_DIR/client.crt"
 SSL_KEY="$BASE_DIR/client.key"
-VERSION_FILE="$BASE_DIR/VERSION"
 DEVMODEL=$(cat /proc/device-tree/model 2>/dev/null |tr -d '\0')
 DEFAULT_LINK=$(ip route list|grep 'default'|head -n 1|awk '{print $5}')
-DEFAULT_MACADDR=$(ip link show "${DEFAULT_LINK}"|grep 'ether'|awk '{print $2}')
-DEFAULT_GW=$(ip route list|grep 'default'|head -n 1|awk '{print $3}')
-DEFAULT_SUBNET=$(ip addr show "${DEFAULT_LINK}"|grep 'inet '|awk '{print $2}')
-DEFAULT_HOSTIP=$(echo "${DEFAULT_SUBNET}"|awk -F/ '{print $1}')
+if [[ -n $DEFAULT_LINK ]]; then
+    DEFAULT_MACADDR=$(ip link show "${DEFAULT_LINK}"|grep 'ether'|awk '{print $2}')
+    DEFAULT_GW=$(ip route list|grep 'default'|head -n 1|awk '{print $3}')
+    DEFAULT_SUBNET=$(ip addr show "${DEFAULT_LINK}"|grep 'inet '|awk '{print $2}')
+    DEFAULT_HOSTIP=$(echo "${DEFAULT_SUBNET}"|awk -F/ '{print $1}')
+fi
+
 SET_LINK=""
 MACADDR=""
 
 TMP="tmp"
+mkdir -p $TMP
 LOG_FILE="ins.log"
 
 K8S_LOW="1.12.3"
@@ -41,18 +44,20 @@ mirror_pods=(
     "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master"
     "https://raw.githubusercontent.com/qinghon/BonusCloud-Node/master"
 )
-mkdir -p $TMP
-DISPLAYINFO="0"
-_SET_IP_ADDRESS=0
 
-echoerr(){
-    printf "\033[1;31m$1\033[0m"
+
+echoerr(){ printf "\033[1;31m$1\033[0m" 
 }
-echoinfo(){
-    printf "\033[1;32m$1\033[0m"
+echoinfo(){ printf "\033[1;32m$1\033[0m"
 }
-echowarn(){
-    printf "\033[1;33m$1\033[0m"
+echowarn(){ printf "\033[1;33m$1\033[0m"
+}
+echo-(){
+    local columns
+    columns=$(stty size 2>/dev/null|awk '{print $2}')
+    columns=${columns:-80}
+    yes "-"|sed "${columns}q"|tr -d '\n'
+    printf "\n"
 }
 log(){
     timeOut="[$(date '+%Y-%m-%d %H:%M:%S')]"
@@ -104,18 +109,20 @@ sys_codename(){
     fi
 }
 run_as_root(){
+    # 检测是否有root权限
     if [[ $(id -u) -eq 0 ]]; then
         return 0
     fi
     if which sudo >/dev/null ; then
         echoerr "Please run as sudo:\nsudo bash $0 $1\n"
+        exit 1
     else
         echoerr "Please run as root user!\n"
+        exit 2
     fi
-    
-    
 }
 env_check(){
+    # 检查环境
     # Detection package manager
     if which apt >/dev/null ; then
         echoinfo "Find apt\n"
@@ -133,13 +140,11 @@ env_check(){
     ret_c=$(which curl >/dev/null;echo $?)
     ret_w=$(which wget >/dev/null;echo $?)
     case ${PG} in
-        apt )
-            $PG install -y curl wget apt-transport-https
-            ;;
-        yum )
-            $PG install -y curl wget
+        apt ) $PG install -y curl wget apt-transport-https ;;
+        yum ) $PG install -y curl wget ;;
     esac
     # Check if the system supports
+    # 使用screenfetch工具检测系统发行版
     [ ! -s $TMP/screenfetch ]&&wget  -nv -O $TMP/screenfetch "https://raw.githubusercontent.com/KittyKatt/screenFetch/master/screenfetch-dev" 
     chmod +x $TMP/screenfetch
     OS_line=$($TMP/screenfetch -n |grep 'OS:')
@@ -155,9 +160,10 @@ env_check(){
     fi
 }
 down(){
+    # 根据设置的源下载文件,错误时切换源
     for link in "${mirror_pods[@]}"; do
         
-        if wget -nv "${link}/$1" -O "$2" ; then
+        if wget "${link}/$1" -O "$2" ; then
             break
         else
             continue
@@ -166,9 +172,11 @@ down(){
     done
     return 1
 }
+# 版本大小对比函数
 function version_ge() { test "$(echo "$@" | tr " " "\n" | sort -rV | head -n 1)" == "$1"; }
 function version_le() { test "$(echo "$@" | tr " " "\n" | sort -V  | head -n 1)" == "$1"; }
 check_doc(){
+    # 检查docker 安装状态和版本
     retd=$(which docker>/dev/null;echo $?)
     if [ "${retd}" -ne 0 ]; then
         log "[info]" "docker not found"
@@ -184,6 +192,7 @@ check_doc(){
     fi
 }
 check_k8s(){
+    # 检查k8s安装状态和版本
     reta=$(which kubeadm>/dev/null;echo $?)
     retl=$(which kubelet>/dev/null;echo $?)
     retc=$(which kubectl>/dev/null;echo $?)
@@ -216,6 +225,7 @@ check_k8s(){
     fi
 }
 check_info(){
+    # 检测node.db文件是否有信息
     if [ ! -s ${NODE_INFO} ]; then
         touch ${NODE_INFO}
     else
@@ -231,6 +241,7 @@ check_info(){
     fi
 }
 ins_docker(){
+    # 安装docker
     check_doc
     ret=$?
     if [[ ${ret} -eq 0 || ${ret} -eq 2 ]]   ; then
@@ -240,9 +251,11 @@ ins_docker(){
     env_check
     if [[ "$PG" == "apt" ]]; then
         # Install docker with APT
+        # apt 安装docker
         curl -fsSL "https://download.docker.com/linux/$OS/gpg" | apt-key add -
         echo "deb https://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/$OS  $OS_CODENAME stable"  >/etc/apt/sources.list.d/docker.list
         apt update
+        # 遍历版本号,安装不能超过限制的版本
         for line in $(apt-cache madison docker-ce|awk '{print $3}') ; do
             if version_le "$(echo "$line" |grep -E -o '([0-9]+\.){2}[0-9]+')" "$DOC_HIG" ; then
                 apt-mark unhold docker-ce
@@ -253,6 +266,7 @@ ins_docker(){
         apt-mark hold docker-ce 
     elif [[ "$PG" == "yum" ]]; then
         # Install docker with yum
+        # 同上
         yum install -y yum-utils
         yum-config-manager --add-repo  https://mirrors.aliyun.com/docker-ce/linux/centos/docker-ce.repo
         yum makecache
@@ -270,6 +284,7 @@ ins_docker(){
         log "[error]" "package manager ${PG} not support "
         return 1
     fi
+    usermod -aG docker $USER
     systemctl enable docker.service
     systemctl start docker.service
     check_doc
@@ -283,11 +298,13 @@ ins_docker(){
     fi
 }
 jq_yum_ins(){
+    # 安装EPEL仓库就为了装个jq,可恶
     wget -O $TMP/epel-release-latest-7.noarch.rpm http://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
     rpm -ivh $TMP/epel-release-latest-7.noarch.rpm
     yum install -y jq
 }
 ins_jq(){
+    # 安装jq json文件分析工具
     if which jq>/dev/null; then
         return
     fi
@@ -299,7 +316,8 @@ ins_jq(){
     esac
 }
 init(){
-    echo >$LOG_FILE
+    # 初始化目录/文件
+    printf "">$LOG_FILE
     if ! systemctl enable ntp  >/dev/null 2>&1 ; then
         timedatectl set-ntp true
     else
@@ -384,10 +402,15 @@ ins_conf(){
 }
 
 _set_node_systemd(){
+    # 指定网卡启动node
     if [[ -z "${SET_LINK}" ]]; then
-        INSERT_STR="#--intf ${DEFAULT_LINK}"
+        INSERT_STR=""
     else
         INSERT_STR="--intf ${SET_LINK}"
+    fi
+    # 启动时不设置硬盘
+    if [[ ${_DON_SET_DISK} -eq 1 ]]; then
+        DON_SET_DISK="--devoff"
     fi
     cat <<EOF >/lib/systemd/system/bxc-node.service
 [Unit]
@@ -395,7 +418,7 @@ Description=bxc node app
 After=network.target
 
 [Service]
-ExecStart=/opt/bcloud/nodeapi/node --alsologtostderr ${INSERT_STR}
+ExecStart=/opt/bcloud/nodeapi/node --alsologtostderr ${DON_SET_DISK} ${INSERT_STR} 
 Restart=always
 RestartSec=10
 
@@ -404,16 +427,20 @@ WantedBy=multi-user.target
 EOF
 }
 node_ins(){
+    # 安装node组件
+    # 区分kernel版本下载文件
     kel_v=$(uname -r|grep -E -o '([0-9]+\.){2}[0-9]')
     Rlink="img-modules"
     if  version_ge "$kel_v" "5.0.0" ; then
         Rlink="$Rlink/5.0.0-aml-N1-BonusCloud"
     fi
+    # 下载文件列表
     down "$Rlink/info.txt" "$TMP/info.txt"
     if [ ! -s "$TMP/info.txt" ]; then
         log "[error]" "wget \"$Rlink/info.txt\" -O $TMP/info.txt"
         return 1
     fi
+    # 遍历文件列表下载文件
     for line in $(grep "$ARCH" $TMP/info.txt)
     do
         git_file_name=$(echo "$line" | awk -F: '{print $1}')
@@ -442,6 +469,7 @@ node_ins(){
     systemctl enable bxc-node
     systemctl start bxc-node
     sleep 1
+    #检验是否启动成功
     isactive=$(curl -fsSL http://localhost:9017/version>/dev/null; echo $?)
     if [ "${isactive}" -ne 0 ];then
         log "[error]" " node start faild, rollback and restart"
@@ -451,11 +479,13 @@ node_ins(){
     fi
 }
 node_remove(){
+    # 清除上面安装的node组件
     systemctl stop bxc-node
     systemctl disable bxc-node
     rm -rf /lib/systemd/system/bxc-node.service 
 }
 bxc-network_ins(){
+    # 安装网络插件,用与连接到bxc网络
     ret_4=$(apt list libcurl4 2>/dev/null|grep -q installed;echo $?)
     if [[ ${ret_4} -eq 0 ]]; then
         log "[info]" "Install libcurl4 library bxc-network"
@@ -486,6 +516,7 @@ EOF
     systemctl enable bxc-network&&systemctl start bxc-network
 }
 bxc-network_run(){
+    # 检验是否运行
     [ ! -s ${SSL_KEY} ] && log "[info]" "${SSL_KEY} file not found"&&return 1
 
     ${BASE_DIR}/bxc-network
@@ -504,7 +535,7 @@ bxc-network_run(){
     fi
 }
 goproxy_ins(){
-    
+    # 安装goproxy本地代理程序
     if which proxy>/dev/null ; then
         return 0
     fi
@@ -567,7 +598,6 @@ goproxy_remove(){
     rm -rf /usr/bin/proxy /etc/goproxy /var/log/goproxy 2>/dev/null
 }
 goproxy_check(){
-    #set -x
     if ! pgrep "proxy" >/dev/null ; then
         log "[error]" "goproxy not runing"
     fi
@@ -582,7 +612,6 @@ goproxy_check(){
         return 2
     fi
     return 0
-    #set +x
 }
 teleport_ins(){
     echo "Would you like to install teleprot for remote debugging by developers? "
@@ -603,6 +632,7 @@ teleport_remove(){
     rm -f /etc/systemd/system/teleport.service
 }
 read_bcode_input(){
+    # 交互输入bcode
     echoinfo "Input bcode:";read -r  bcode
     echoinfo "Input email:";read -r  email
     if [[ -z "${bcode}" ]] || [[ -z "${email}" ]]; then
@@ -617,6 +647,7 @@ read_bcode_input(){
     return 0
 }
 bound(){
+    # 命令行绑定
     local bcode=""
     local email=""
     [ -s /opt/bcloud/node.db ]&&log "[info]" "${NODE_INFO} exits ,skip" && return 0
@@ -647,26 +678,30 @@ only_ins_network_base(){
 }
 only_net_check_network(){
     echoinfo "Testing network... \n"
-    set -x
-    network_result=$(docker run --rm -it --net=bxc-macvlan "qinghon/bxc-net:amd64" \
-    /bin/sh -c "curl -m 3 -fs baidu.com -o /dev/null >/dev/null 2>&1;echo $?")
+    network_result=$(docker run --rm -it --net=bxc1 "qinghon/bxc-net:$VDIS" \
+    /bin/sh -c "curl -m 3 -fs baidu.com -o /dev/null >/dev/null 2>&1";echo $?)
     if [[ $network_result -ne 0 ]]; then
-        echoerr "This bridge network can not connect network,remove it!\n"
-        docker network rm bxc-macvlan
-        set +x
+        echoerr "This bridge network can not connect network,curl return $network_result\n"
+        read -r -e -p "Delete this network?:" -i "Y" -t 5 choose
+        choose=${choose:-"Y"}
+        case $choose in
+            Y|y ) docker network rm bxc1 &&echoerr "\nDelete success\n";;
+            *   ) echoerr "\nCancel!\n";;
+        esac
         return 1
     else
-        set +x
         echoinfo "network seting success!\n"
         return 0
     fi
 }
 only_net_set_promisc(){
+    # 开启网卡混杂模式,还需外部配合
     local LINK="$1"
     if [[ -z "$LINK" ]]; then
         return 1
     fi
     ip link set "${LINK}" promisc on
+    # 持久化
     if [[ ! -s /etc/rc.local ]] ;then
         echo -e '#!/bin/bash\nexit 0'>/etc/rc.local
         chmod 755 /etc/rc.local
@@ -678,7 +713,8 @@ only_net_set_promisc(){
     fi
 }
 only_net_set_bridge(){
-    bxc_network_bridge_id=$(docker network ls -f name=bxc --format "{{.ID}}:{{.Name}}"|grep bxc-macvlan|awk -F: '{print $1}')
+    # 设置macvlan桥接网络
+    bxc_network_bridge_id=$(docker network ls -f name=bxc --format "{{.ID}}:{{.Name}}"|grep -E 'bxc-macvlan|bxc1'|awk -F: '{print $1}')
     if [[ -n "${bxc_network_bridge_id}" ]]; then
         return 0
     fi
@@ -702,22 +738,22 @@ only_net_set_bridge(){
     echo "docker network create -d macvlan --subnet=\"${LINK_SUBNET}\" \
     --gateway=\"${LINK_GW}\" --aux-address=\"exclude_host=${LINK_HOSTIP}\" \
     --ip-range=\"${SET_RANGE}\" \
-    -o parent=\"${LINK}\" -o macvlan_mode=\"bridge\" bxc-macvlan"
+    -o parent=\"${LINK}\" -o macvlan_mode=\"bridge\" bxc1"
     docker network create -d macvlan --subnet="${LINK_SUBNET}" \
     --gateway="${LINK_GW}" --aux-address="exclude_host=${LINK_HOSTIP}" \
     --ip-range="${SET_RANGE}" \
-    -o parent="${LINK}" -o macvlan_mode="bridge" bxc-macvlan
+    -o parent="${LINK}" -o macvlan_mode="bridge" bxc1
+    # 检验网卡通不通
     if ! only_net_check_network ; then
         return 3
     fi
-    
 }
-only_ins_network_docker_run(){
-    bcode="$1"
-    email="$2"
+generate_mac_addr(){
+    # 随机生成mac
     random_mac_addr=$(od /dev/urandom -w4 -tx1 -An|sed -e 's/ //' -e 's/ /:/g'|head -n 1)
     if [[ -z $mac_head ]]; then
-        local mac_head_tmp=$(od /dev/urandom -w2 -tx1 -An|sed -e 's/ //' -e 's/ /:/g'|head -n 1)
+        local mac_head_tmp
+        mac_head_tmp=$(od /dev/urandom -w2 -tx1 -An|sed -e 's/ //' -e 's/ /:/g'|head -n 1)
         echoinfo "Set mac address:\n";read -r -e -i "${mac_head_tmp}:${random_mac_addr}" mac_addr
     else
         echoinfo "Set mac address:\n";read -r -e -i "${mac_head}:${random_mac_addr}" mac_addr
@@ -728,26 +764,55 @@ only_ins_network_docker_run(){
         mac_addr=$(od /dev/urandom -w6 -tx1 -An|sed -e 's/ //' -e 's/ /:/g'|head -n 1)
         echoinfo "Generate a mac address: $mac_addr\n"
     fi
+}
+run_command(){
+    #log '[info]' "$1"
+    $1
+    return $?
+}
+
+only_ins_network_docker_run(){
+    bcode="$1"
+    email="$2"
+    mac_import="$3"
+    local mac_addr
+    #local mac_head="$mac_head"
+    # 获取或生成mac
+    if [[ -n $mac_import ]] ;then 
+        mac_addr="$mac_import"
+    else
+        generate_mac_addr
+    fi
     mac_head_tmp=$(echo "$mac_addr"|awk -F: '{print $1,$2}'|sed 's/ /:/g')
+    # -H 选项 设置静态IP
     if [[ $_SET_IP_ADDRESS -eq 1 ]]; then
-        local set_ipaddress=""
-        local ipaddress=""
+        local set_ipaddress
+        local ipaddress
         echoinfo "Set ip address:\n" ;read -r ipaddress
         set_ipaddress="--ip=\"${ipaddress}\""
-        con_id=$(docker run -d --cap-add=NET_ADMIN --net=bxc-macvlan --ip="$ipaddress" --device /dev/net/tun --restart=always \
-        --sysctl net.ipv6.conf.all.disable_ipv6=0 --mac-address="$mac_addr" \
-        -e bcode="${bcode}" -e email="${email}" --name=bxc-"${bcode}" \
-        -v bxc_data_"${bcode}":/opt/bcloud \
-        "${image_name}")
     else
-        con_id=$(docker run -d --cap-add=NET_ADMIN --net=bxc-macvlan --device /dev/net/tun --restart=always \
-            --sysctl net.ipv6.conf.all.disable_ipv6=0 --mac-address="$mac_addr" \
-            -e bcode="${bcode}" -e email="${email}" --name=bxc-"${bcode}" \
-            -v bxc_data_"${bcode}":/opt/bcloud \
-            "${image_name}")
+        set_ipaddress=''
+    fi
+    # 选择新旧网卡名
+    local network_name
+    if docker network ls -f name=bxc --format "{{.Name}}"|grep -q 'bxc1'; then
+        network_name="--net=bxc1"
+    else
+        network_name="--net=bxc-macvlan"
+    fi
+    command="docker run -d --cap-add=NET_ADMIN $network_name $set_ipaddress --mac-address=$mac_addr \
+        --sysctl net.ipv6.conf.all.disable_ipv6=0 --device /dev/net/tun --restart=always  \
+        -e bcode=${bcode} -e email=${email} --name=bxc-${bcode} \
+        -v bxc_data_${bcode}:/opt/bcloud \
+        ${image_name}"
+    # 运行命令
+    con_id=$(run_command "$command")
+    if [[ -z $con_id ]]; then
+        return 1
     fi
     echo "${con_id}"
-    sleep 2
+    sleep 3
+    # 检测绑定成功与否
     fail_log=$(docker logs "${con_id}" 2>&1 |grep 'bonud fail'|head -n 1)
     if [[ -n "${fail_log}" ]]; then
         echoerr "bound fail\n${fail_log}\n"
@@ -755,18 +820,20 @@ only_ins_network_docker_run(){
         docker rm "${con_id}"
         return 
     fi
-    create_status=$(docker container inspect "${con_id}"|grep -Po '"Status": "\K.*?(?=")')
+    # 检测是否为mac问题导致不能running,并清除
+    create_status=$(docker container inspect "${con_id}" --format "{{.State.Status}}")
     if [[ "$create_status" == "created" ]]; then
         echowarn "Delete can not run container\n"
         docker container rm "${con_id}"
         return 
     else
+        # 运行成功时,修改自身脚本定义的mac头为可用头
         if [[ -z $mac_head ]]; then
             mac_head="$mac_head_tmp"
             sed -i "s/local mac_head=\"\"/local mac_head=\"${mac_head_tmp}\"/g" "$0"
         fi
     fi
-    echo "--------------------------------------------------------------------------------"
+    echo-
 }
 _get_ip_mainland(){
     geoip=$(curl -4 -fsSL "https://api.ip.sb/geoip")
@@ -777,19 +844,26 @@ _get_ip_mainland(){
         return 1
     fi
 }
-only_ins_network_docker_openwrt(){
-    ins_docker
-    ins_jq
-    local image_name=""
-    local mac_head=""
+_only_net_get_image(){
+    # 保证为最新镜像
     case $VDIS in
         amd64  ) image_name="qinghon/bxc-net:amd64" ;;
         arm64  ) image_name="qinghon/bxc-net:arm64" ;;
         *      ) echoerr "No support $VDIS\n";return 4  ;;
     esac
+    echoinfo "Downloading $image_name ...\n"
     docker pull "${image_name}"
     if ! docker images --format "{{.Repository}}"|grep -q 'qinghon/bxc-net' ; then
         echoerr "pull failed,exit!,you can try: docker pull ${image_name}\n"
+        return 1
+    fi
+}
+only_ins_network_docker_openwrt(){
+    ins_docker
+    ins_jq
+    local image_name=""
+    local mac_head=""
+    if ! _only_net_get_image ; then
         return 1
     fi
     if ! only_net_set_bridge ; then
@@ -803,6 +877,7 @@ only_ins_network_docker_openwrt(){
     fi
     if [[ ${#bcode} -le 3 && ${bcode} -le 100 ]]; then
         json=$(curl -fsSL "https://console.bonuscloud.io/api/bcode/getBcodeForOther/?email=${email}")
+        # 输入为数字时,获取用户账户里的bcode,区分海内外
         if ! _get_ip_mainland ; then
             all_bcode_length=$(echo "${json}"|jq '.ret.mainland|length')
             bcode_list=$(echo "${json}"|jq '.ret.mainland')
@@ -821,6 +896,7 @@ only_ins_network_docker_openwrt(){
             echoerr "not found bcode in ${email}\n"
         fi
     else
+        # 直接输入bcode时
         read_bcode=$(echo "${bcode}"|grep -E -o "[0-9a-f]{4}-[0-9a-f]{8}-([0-9a-f]{4}-){2}[0-9a-f]{4}-[0-9a-f]{12}")
         if [[ -z "${read_bcode}" ]]; then
             echowarn "bcode input error\n"
@@ -830,7 +906,7 @@ only_ins_network_docker_openwrt(){
             len=1
         fi
     fi
-
+    # 遍历bcode,启动容器
     for i in $(echo "${read_all_bcode}"|head -n "$len") ; do
         echoinfo "bcode: $i\n"
         only_ins_network_docker_run "${i}" "${email}"
@@ -846,6 +922,67 @@ only_ins_network_choose_plan(){
         1 ) only_ins_network_base;;
         2 ) only_ins_network_docker_openwrt ;;
         * ) echowarn "\nno choose(未选择)\n";;
+    esac
+}
+only_net_cert_export(){
+    Datas=$(docker volume ls --format "{{.Name}}"|grep 'bxc_data_')
+    [[ -z "$Datas" ]]&&echoerr "not found volumes,exit\n"&&return 1
+    echoinfo "Find $(echo "${Datas}"|grep -c '') volume \n"
+    ABSOLUTE_PATH=$(pwd)
+    for data in $Datas ; do
+        echoinfo "backuping \t$data\n"
+        docker run --rm -it -v "$data:/opt/bcloud" -v "$ABSOLUTE_PATH/$TMP":/backup qinghon/bxc-net:$VDIS \
+        /bin/sh -c "[ -s /opt/bcloud/ca.crt ] &&tar -cpf \"/backup/$data.tar\" $NODE_INFO $SSL_CA $SSL_CRT $SSL_KEY 2>/dev/null"
+        [[ ! -s  "$ABSOLUTE_PATH/$TMP/$data.tar" ]]&&echoerr "not file in\t$data\n"&&docker volume rm "$data"
+    done
+    echoinfo "backup all over!files in $ABSOLUTE_PATH/$TMP\n"
+}
+only_net_cert_import_run(){
+    # 根据导入的证书启动容器
+    local FILEs bcode_ email_ mac_addr_ image_name
+    FILEs=$(find . -name 'bxc_data_*.tar')
+    [[ -z "$FILEs" ]]&&echoerr "not found certificate file,exit"&&return 1
+    if ! _only_net_get_image ; then
+        return 1
+    fi
+    echoinfo "Find $(echo "${FILEs}"|grep -c '') file\n"
+    for i in $FILEs ;do
+        info=$(tar -xf "$i" opt/bcloud/node.db -O 2>/dev/null)
+        if [[ -z $info ]]; then
+            echoerr "not found bcode from $i\n"
+            continue
+        fi
+        bcode_=$(echo "$info"|jq -r '.bcode')
+        email_=$(echo "$info"|jq -r '.email')
+        mac_addr_=$(echo "$info"|jq -r '.mac_address')
+        only_ins_network_docker_run "$bcode_" "$email_" "$mac_addr_"
+    done
+}
+only_net_cert_import(){
+    # 从tar文件导入证书
+    local FILEs
+    FILEs=$(find . -name 'bxc_data_*.tar')
+    [[ -z "$FILEs" ]]&&echoerr "not found certificate file,exit"&&return 1
+    echoinfo "Find $(echo "${FILEs}"|grep -c '') file\n"
+    ABSOLUTE_PATH=$(pwd)
+    for i in $FILEs; do
+        DIR=$(dirname "$i")
+        DIR="${ABSOLUTE_PATH}${DIR:1}"
+
+        filename=$(basename "$i")
+        bcode=$(echo "$i"|grep -E -o "[0-9a-f]{4}-[0-9a-f]{8}-([0-9a-f]{4}-){2}[0-9a-f]{4}-[0-9a-f]{12}")
+        [[ -z $bcode ]]&& echoerr "can not get bcode for $i" && continue
+        echoinfo "importing\t$bcode ...\n"
+        docker create -v "bxc_data_$bcode":/opt/bcloud --name "bxc_date_tmp_$bcode" qinghon/bxc-net:$VDIS true 1>/dev/null 
+        docker run --rm --volumes-from="bxc_date_tmp_$bcode" \
+        -v "$DIR":/backup qinghon/bxc-net:$VDIS tar xf "/backup/$filename" -C /
+        docker rm "bxc_date_tmp_$bcode" 1>/dev/null
+        set +x
+    done
+    # 手动选择是否现在启动
+    read -r -e -p "Run it now?:" -i "Y"  choose
+    case $choose in
+        Y|y ) only_net_cert_import_run ;;
     esac
 }
 only_net_remove(){
@@ -871,12 +1008,12 @@ ins_kernel(){
     down "/aarch64/res/N1_kernel/N1.dtb" "$TMP/N1.dtb"
     echo "verifty file md5..."
     while read line; do
-        file_name=`echo ${line} |awk '{print $2}'`
-        git_md5=`echo ${line} |awk '{print $1}'`
-        local_md5=`md5sum $TMP/$file_name|awk '{print $1}'`
+        file_name=$(echo "${line}" |awk '{print $2}')
+        git_md5=$(echo "${line}" |awk '{print $1}')
+        local_md5=$(md5sum "$TMP/$file_name"|awk '{print $1}')
         if [[ "$git_md5" != "$local_md5" ]]; then
             down "/aarch64/res/N1_kernel/$file_name" "$TMP/$file_name"
-            local_md5=`md5sum $TMP/$file_name|awk '{print $1}'`
+            local_md5=$(md5sum "$TMP/$file_name"|awk '{print $1}')
             if [[ "$git_md5" != "$local_md5" ]]; then
                 echo "download $TMP/$file_name failed,md5 check fail"
             fi
@@ -935,25 +1072,62 @@ set_interfaces_name(){
     esac
     
 }
+_show_info(){
+    Status="$1"
+    num=$2
+    ID="$3"
+    have_tun0=$4
+    ip_addr="$5"
+    mac_addr="$6"
+    if [[ "$Status" != "running" || $have_tun0 -ne 0 ]]; then
+        echoerr "${num}  ${Status}\ttun0 not create\t$ID\t\t${mac_addr}\t\n"
+    else
+        echoinfo "${num}  ${Status}\t\ttun0 run\t${ip_addr}\t${mac_addr}\n"
+    fi
+}
 only_net_show(){
-    #set -x
+    # 显示单网络任务的所有容器
+    ins_jq
     IDs=$(docker ps -a --filter="ancestor=qinghon/bxc-net:$VDIS" --format "{{.ID}}")
-    echoerr "Status\t\ttun0 Status\t\tcontainer ID\n"
-    echoinfo "Status\t\ttun0 Status\tIP\t\tMAC address\n"
-    echo "--------------------------------------------------------------------------------"
+    echoerr  "num Status\ttun0 Status\tcontainer ID\t\tMAC\n"
+    echoinfo "num Status\t\ttun0 Status\tIP\t\tMAC address\n"
+    echo-
+    local LFS_tmp=$LFS
+    LFS=\n
+    IDs_arr=($IDs)
+    LFS=$LFS_tmp
+    run_num=0
+    fail_num=0
     for i in $IDs; do
-        inspect=$(docker container inspect "${i}")
-        Status=$(echo "$inspect"|grep -Po '"Status": "\K.*?(?=")')
-        have_tun0=$(docker exec -i "$i" /bin/sh -c "ip addr show dev >/dev/null 2>&1;echo $?" 2>/dev/null)
-        ipaddress=$(echo "$inspect"|grep -Po '"IPAddress": "\K.*?(?=")'|head -n 1)
-        mac_addr=$(echo "$inspect"|grep -Po '"MacAddress": "\K.*?(?=")'|sed -n '2p')
-        if [[ "$Status" == "running" ]]; then
-            echoinfo "${Status}\t\ttun0 run\t${ipaddress}\t${mac_addr}\n"
-        else
-            echoerr "${Status}\t\ttun0 not create${ipaddress}\t${mac_addr}\t${i}\n"
+        con_info=$(docker container inspect "$i")
+        Status=$(echo "$con_info"|jq -r '.[]|.State.Status')
+        if [[ "$Status" != "running" ]]; then
+            fail_num=$(($fail_num+1))
+            _show_info "$Status" "$fail_num" "$i" "1" "" ""
+            continue
         fi
+        have_tun0=$(docker exec -it "$i" /bin/sh -c 'ip addr show dev tun0 >/dev/null 2>&1' 2>/dev/null;echo $?)
+        network_name=$(echo "$con_info"|jq -r '.[]|.NetworkSettings.Networks|to_entries|.[]|.key')
+        if [[ "$network_name" == "bxc1" ]]; then
+            ip_addr=$(echo "$con_info"|jq -r '.[]|.NetworkSettings.Networks.bxc1.IPAddress')
+            mac_addr=$(echo "$con_info"|jq -r '.[]|.NetworkSettings.Networks.bxc1.MacAddress')
+        else
+            ip_addr=$(echo "$con_info"|jq -r '.[]|.NetworkSettings.Networks."bxc-macvlan".IPAddress')
+            mac_addr=$(echo "$con_info"|jq -r '.[]|.NetworkSettings.Networks."bxc-macvlan".MacAddress')
+        fi 
+
+        if [[ $have_tun0 -ne 0 ]] ; then
+            fail_num=$(($fail_num+1))
+            _show_info "$Status" "$fail_num" "$i" "$have_tun0" "$ip_addr" "$mac_addr"
+            continue
+        fi
+        run_num=$(($run_num+1))
+        _show_info "$Status" "$run_num" "$i" "$have_tun0" "$ip_addr" "$mac_addr"
     done
-    #set +x
+    echo-
+    echoinfo "${run_num} running\t\t"
+    echoerr "${fail_num} not running\t\t"
+    echoinfo "${#IDs_arr[@]} Total\n"
 }
 mg(){
     echoins(){
@@ -1039,28 +1213,84 @@ remove(){
     esac
 
 }
+
+en_us_help=(
+    "bash $0 [option]    "
+    "    -h             Print this and exit"
+    "     └── -L        Specify help language,like \"-h -L zh_cn\""
+    "    -b             bound for command"
+    "    -d             Only install docker"
+    "    -c             change kernel to compiled dedicated kernels,only \"Phicomm N1\"" 
+    "                   and is danger!"
+    "    -i             Installation environment check and initialization"
+    "    -k             Install the k8s environment and the k8s components that" 
+    "                   BonusCloud depends on"
+    "    -n             Only install node management components "
+    "    -r             Fully remove bonuscloud plug-ins and components"
+    "    -s             Install teleport for remote debugging by developers"
+    "    -t             Show all plugin running status"
+    "    -e             Set interfaces name to ethx,only x86_64 and using grub"
+    "    -g             Install network job only"
+    "     └── -H        Set ip for container"
+    "     └── -e        export only network job certificate"
+    "     └── -i        import only network job certificate"
+    "    -D             Don't set disk for node program"
+    "    -I Interface   set interface name to you want"
+    "    -S             show Info level output"
+    " "
+    "When no parameters are added, the calculation task component is installed "
+    "by default. If the parameter \"only install\" is added, the corresponding "
+    "component will be installed.")
+zh_cn_help=(
+    "bash $0 [选项]    "
+    "    -h             打印此帮助并退出"
+    "     └── -L        指定帮助语言,如\"-h -L zh_cn\" "
+    "    -b             命令行绑定"
+    "    -d             仅安装Docker程序"
+    "    -c             安装定制内核,仅支持\"Phicomm N1\""
+    "    -i             仅初始化"
+    "    -k             仅安装k8s组件"
+    "    -n             安装node组件"
+    "    -r             清除所有安装的相关程序"
+    "    -s             仅安装teleport远程调试程序,默认安装"
+    "    -t             显示各组件运行状态"
+    "    -e             设置网卡名称为ethx格式,仅支持使用grub的x86设备"
+    "    -g             仅安装网络任务"
+    "     └── -H        网络容器指定IP"
+    "     └── -e        导出单网络任务证书"
+    "     └── -i        导入单网络任务证书"
+    "    -D             不初始化外挂硬盘"
+    "    -I Interface   指定安装时使用的网卡"
+    "    -S             显示Info等级日志"
+    " "
+    "不加参数时,默认安装计算任务组件,如加了\"仅安装..\"等参数时将安装对应组件")
+
 displayhelp(){
     echo -e "\033[2J"
-    echo "bash $0 [option]" 
-    echo -e "    -h             Print this and exit"
-    echo -e "    -i             Installation environment check and initialization"
-    echo -e "    -k             Install the k8s environment and the k8s components that" 
-    echo -e "                   BonusCloud depends on"
-    echo -e "    -n             Install node management components"
-    echo -e "    -r             Fully remove bonuscloud plug-ins and components"
-    echo -e "    -s             Install teleport for remote debugging by developers"
-    echo -e "    -c             change kernel to compiled dedicated kernels,only \"Phicomm N1\"" 
-    echo -e "                   and is danger!"
-    echo -e "    -e             set interfaces name to ethx"
-    echo -e "    -g             Install network job only"
-    echo -e "    -b             bound for command"
-    echo -e "    -I Interface   set interface name to you want"
-    echo -e "    -S             show Info level output "
+    case $_LANG in
+        zh_CN.UTF-8|zh_cn )
+            for i in "${!zh_cn_help[@]}"; do
+                help_arr[$i]="${zh_cn_help[$i]}"
+            done 
+            ;;
+        *           )
+            for i in "${!en_us_help[@]}"; do
+                help_arr[$i]="${en_us_help[$i]}"
+            done
+            ;;
+    esac
+    for i in "${!help_arr[@]}"; do
+        printf "${help_arr[$i]}\n"
+    done
     exit 0
 }
 
+DISPLAYINFO="0"
+_LANG="${LANG}"
+
 _SYSARCH=1
 _INIT=0
+_NET_CONF=0
 _DOCKER_INS=0
 _NODE_INS=0
 _REMOVE=0
@@ -1071,6 +1301,9 @@ _K8S_INS=0
 _BOUND=0
 _SHOW_STATUS=0
 _SET_ETHX=0
+_DON_SET_DISK=0
+_SET_IP_ADDRESS=0
+_SHOW_HELP=0
 
 if [[ $# == 0 ]]; then
     _INIT=1
@@ -1078,38 +1311,45 @@ if [[ $# == 0 ]]; then
     _NODE_INS=1
     _TELEPORT=1
     _K8S_INS=1
+    _NET_CONF=1
 fi
 
-while  getopts "bdiknrsceghI:tSHT" opt ; do
+while  getopts "bdiknrstceghI:DSHL:" opt ; do
     case $opt in
         i ) _INIT=1         ;;
         b ) _BOUND=1        ;;
+        c ) _CHANGE_KN=1    ;;
         d ) _DOCKER_INS=1   ;;
         k ) _K8S_INS=1      ;;
         n ) _NODE_INS=1     ;;
         r ) _REMOVE=1       ;;
         s ) _TELEPORT=1     ;;
         e ) _SET_ETHX=1     ;;
-        h ) displayhelp     ;;
         t ) _SHOW_STATUS=1  ;;
         g ) _ONLY_NET=1     ;;
+        h ) _SHOW_HELP=1    ;;
+        D ) _DON_SET_DISK=1 ;;
         I ) _select_interface "${OPTARG}" ;;
         S ) DISPLAYINFO="1" ;;
         H ) _SET_IP_ADDRESS=1   ;;
-        T ) only_net_check_network ;;
+        L ) _LANG="${OPTARG}"   ;;
+        h ) _SHOW_HELP=1    ;;
         ? ) echoerr "Unknow arg. exiting" ;displayhelp; exit 1 ;;
     esac
 done
-
+[[ $_SHOW_HELP -eq 1 ]]     &&displayhelp
 [[ $_SYSARCH -eq 1 ]]       &&sysArch   &&sys_codename  &&run_as_root "$*"
 [[ $_SHOW_STATUS -eq 1 && $_ONLY_NET -eq 1 ]] &&_ONLY_NET=0&& _SHOW_STATUS=0&&only_net_show
+[[ $_ONLY_NET -eq 1 && $_SET_ETHX -eq 1 ]]  &&_ONLY_NET=0 && _SET_ETHX=0&&only_net_cert_export
+[[ $_ONLY_NET -eq 1 && $_INIT -eq 1 ]]      &&_ONLY_NET=0 && _INIT=0 &&only_net_cert_import
 [[ $_INIT -eq 1 ]]          &&init
-[[ $_DOCKER_INS -eq 1 ]]    &&env_check &&ins_docker
+[[ $_DOCKER_INS -eq 1 ]]    &&ins_docker
 [[ $_NODE_INS -eq 1 ]]      &&node_ins
 [[ $_TELEPORT -eq 1 ]]      &&teleport_ins
 [[ $_CHANGE_KN -eq 1 ]]     &&ins_kernel
 [[ $_ONLY_NET -eq 1 ]]      &&only_ins_network_choose_plan
 [[ $_K8S_INS -eq 1 ]]       &&ins_k8s
+[[ $_NET_CONF -eq 1 ]]      &&ins_conf
 [[ $_BOUND -eq 1 ]]         &&bound
 [[ $_SET_ETHX -eq 1 ]]      &&set_interfaces_name
 [[ $_SHOW_STATUS -eq 1 ]]   &&mg
