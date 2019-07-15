@@ -404,7 +404,7 @@ ins_conf(){
 _set_node_systemd(){
     # 指定网卡启动node
     if [[ -z "${SET_LINK}" ]]; then
-        INSERT_STR="#--intf ${DEFAULT_LINK}"
+        INSERT_STR=""
     else
         INSERT_STR="--intf ${SET_LINK}"
     fi
@@ -418,7 +418,7 @@ Description=bxc node app
 After=network.target
 
 [Service]
-ExecStart=/opt/bcloud/nodeapi/node --alsologtostderr ${INSERT_STR} ${DON_SET_DISK}
+ExecStart=/opt/bcloud/nodeapi/node --alsologtostderr ${DON_SET_DISK} ${INSERT_STR} 
 Restart=always
 RestartSec=10
 
