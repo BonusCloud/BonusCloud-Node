@@ -140,7 +140,7 @@ env_check(){
     ret_c=$(which curl >/dev/null;echo $?)
     ret_w=$(which wget >/dev/null;echo $?)
     case ${PG} in
-        apt ) $PG install -y curl wget apt-transport-https ;;
+        apt ) $PG install -y curl wget apt-transport-https pciutils bc;;
         yum ) $PG install -y curl wget ;;
     esac
     # Check if the system supports
@@ -150,7 +150,15 @@ env_check(){
     OS_line=$($TMP/screenfetch -n |grep 'OS:')
     OS=$(echo "$OS_line"|awk '{print $3}'|tr '[:upper:]' '[:lower:]')
     if [[ -z "$OS" ]]; then
-        read -r -p "The release version is not detected, please enter it manually,like \"ubuntu\"" OS
+        source /etc/os-release
+        if echo "${support_os[@]}"|grep -w "$ID" &>/dev/null  ; then
+            OS="$ID"
+            case $ID in
+                ubuntu ) OS_CODENAME="$VERSION_CODENAME" ;;
+            esac
+        else
+            read -r -p "The release version is not detected, please enter it manually,like \"ubuntu\"" OS
+        fi
     fi
     if ! echo "${support_os[@]}"|grep -w "$OS" &>/dev/null ; then
         log "[error]" "This system is not supported by docker, exit"
@@ -435,7 +443,7 @@ node_ins(){
         Rlink="$Rlink/5.0.0-aml-N1-BonusCloud"
     fi
     # 下载文件列表
-    down "$Rlink/info.txt" "$TMP/info.txt"
+    [[ ! -f $TMP/info.txt ]]&&down "$Rlink/info.txt" "$TMP/info.txt"
     if [ ! -s "$TMP/info.txt" ]; then
         log "[error]" "wget \"$Rlink/info.txt\" -O $TMP/info.txt"
         return 1
@@ -453,17 +461,23 @@ node_ins(){
             log "[info]" "local file $file_path version equal git file version,skip"
             continue
         fi
-        down "$Rlink/$git_file_name" "$TMP/$git_file_name" 
+        tmp_md5=$([ -f "$file_path" ] &&md5sum "$TMP/$git_file_name"| awk '{print $1}')
+        if [[ ! -f $TMP/$git_file_name || "$tmp_md5" != "$git_md5_val" ]] ;then
+            down "$Rlink/$git_file_name" "$TMP/$git_file_name"
+        else
+            log "[info]" "local file $TMP/$git_file_name md5sum equal remote md5sum "
+        fi 
         download_md5=$(md5sum $TMP/"$git_file_name" | awk '{print $1}')
         if [ "$download_md5"x != "$git_md5_val"x ];then
             log "[error]" " download file $TMP/$git_file_name md5 $download_md5 different from git md5 $git_md5_val"
             continue
-        else
-            log "[info]" " $TMP/$git_file_name download success."
-            cp -f $TMP/"$git_file_name" "$file_path" > /dev/null
-            chmod "$mod" "$file_path" > /dev/null            
         fi
+        log "[info]" " $TMP/$git_file_name download success."
+        cp -fv $TMP/"$git_file_name" "$file_path" 2> /dev/null
+        rm -v "$TMP/$git_file_name" 2>/dev/null
+        chmod "$mod" "$file_path" > /dev/null            
     done
+    rm -v "$TMP/info.txt"
     _set_node_systemd
     systemctl daemon-reload
     systemctl enable bxc-node
@@ -1075,12 +1089,12 @@ set_interfaces_name(){
 _show_info(){
     Status="$1"
     num=$2
-    ID="$3"
+    con_ID="$3"
     have_tun0=$4
     ip_addr="$5"
     mac_addr="$6"
     if [[ "$Status" != "running" || $have_tun0 -ne 0 ]]; then
-        echoerr "${num}  ${Status}\ttun0 not create\t$ID\t\t${mac_addr}\t\n"
+        echoerr "${num}  ${Status}\ttun0 not create\t$con_ID\t\t${mac_addr}\t\n"
     else
         echoinfo "${num}  ${Status}\t\ttun0 run\t${ip_addr}\t${mac_addr}\n"
     fi
@@ -1234,6 +1248,7 @@ en_us_help=(
     "     └── -H        Set ip for container"
     "     └── -e        export only network job certificate"
     "     └── -i        import only network job certificate"
+    "    -A             Install all task component"
     "    -D             Don't set disk for node program"
     "    -I Interface   set interface name to you want"
     "    -S             show Info level output"
@@ -1259,6 +1274,7 @@ zh_cn_help=(
     "     └── -H        网络容器指定IP"
     "     └── -e        导出单网络任务证书"
     "     └── -i        导入单网络任务证书"
+    "    -A             安装所有计算任务组件"
     "    -D             不初始化外挂硬盘"
     "    -I Interface   指定安装时使用的网卡"
     "    -S             显示Info等级日志"
@@ -1284,6 +1300,14 @@ displayhelp(){
     done
     exit 0
 }
+install_all(){
+    _INIT=1
+    _DOCKER_INS=1
+    _NODE_INS=1
+    _TELEPORT=1
+    _K8S_INS=1
+    _NET_CONF=1
+}
 
 DISPLAYINFO="0"
 _LANG="${LANG}"
@@ -1303,18 +1327,13 @@ _SET_ETHX=0
 _DON_SET_DISK=0
 _SET_IP_ADDRESS=0
 _SHOW_HELP=0
-_TEST=0
+#_TEST=0
 
 if [[ $# == 0 ]]; then
-    _INIT=1
-    _DOCKER_INS=1
-    _NODE_INS=1
-    _TELEPORT=1
-    _K8S_INS=1
-    _NET_CONF=1
+    install_all
 fi
 
-while  getopts "bdiknrstceghI:DSHL:" opt ; do
+while  getopts "bdiknrstceghAI:DSHL:" opt ; do
     case $opt in
         i ) _INIT=1         ;;
         b ) _BOUND=1        ;;
@@ -1328,12 +1347,12 @@ while  getopts "bdiknrstceghI:DSHL:" opt ; do
         t ) _SHOW_STATUS=1  ;;
         g ) _ONLY_NET=1     ;;
         h ) _SHOW_HELP=1    ;;
+        A ) install_all     ;;
         D ) _DON_SET_DISK=1 ;;
         I ) _select_interface "${OPTARG}" ;;
         S ) DISPLAYINFO="1" ;;
         H ) _SET_IP_ADDRESS=1   ;;
         L ) _LANG="${OPTARG}"   ;;
-        h ) _SHOW_HELP=1    ;;
         ? ) echoerr "Unknow arg. exiting" ;displayhelp; exit 1 ;;
     esac
 done
