@@ -645,6 +645,12 @@ teleport_remove(){
     rm -f /lib/systemd/system/teleport.service
     rm -f /etc/systemd/system/teleport.service
 }
+iostat_ins(){
+    case $PG in
+        apt ) apt update&&apt install sysstat -y ;;
+        yum ) yum install sysstat -y ;;
+    esac
+}
 read_bcode_input(){
     # 交互输入bcode
     echoinfo "Input bcode:";read -r  bcode
@@ -1307,6 +1313,7 @@ install_all(){
     _TELEPORT=1
     _K8S_INS=1
     _NET_CONF=1
+    _SYSSTAT=1
 }
 
 DISPLAYINFO="0"
@@ -1318,6 +1325,7 @@ _DOCKER_INS=0
 _NODE_INS=0
 _REMOVE=0
 _TELEPORT=0
+_SYSSTAT=0
 _CHANGE_KN=0
 _ONLY_NET=0
 _K8S_INS=0
@@ -1365,6 +1373,7 @@ done
 [[ $_DOCKER_INS -eq 1 ]]    &&ins_docker
 [[ $_NODE_INS -eq 1 ]]      &&node_ins
 [[ $_TELEPORT -eq 1 ]]      &&teleport_ins
+[[ $_SYSSTAT -eq 1 ]]       &&iostat_ins
 [[ $_CHANGE_KN -eq 1 ]]     &&ins_kernel
 [[ $_ONLY_NET -eq 1 ]]      &&only_ins_network_choose_plan
 [[ $_K8S_INS -eq 1 ]]       &&ins_k8s
