@@ -201,9 +201,9 @@ check_doc(){
 }
 check_k8s(){
     # 检查k8s安装状态和版本
-    reta=$(which kubeadm>/dev/null;echo $?)
-    retl=$(which kubelet>/dev/null;echo $?)
-    retc=$(which kubectl>/dev/null;echo $?)
+    reta=$(which kubeadm>/dev/null 2>&1;echo $?)
+    retl=$(which kubelet>/dev/null 2>&1;echo $?)
+    retc=$(which kubectl>/dev/null 2>&1;echo $?)
     if [ "${reta}" -ne 0 ] || [ "${retl}" -ne 0 ] || [ "${retc}" -ne 0 ] ; then
         log "[info]" "k8s not found"
         return 1
@@ -349,6 +349,7 @@ gpgkey=https://mirrors.aliyun.com/kubernetes/yum/doc/yum-key.gpg https://mirrors
 EOF
     setenforce 0
     yum install  -y kubelet-1.12.3 kubeadm-1.12.3 kubectl-1.12.3 kubernetes-cni-0.6.0
+    yum --exclude kubelet kubeadm kubectl kubernetes-cni
     systemctl enable kubelet && systemctl start kubelet
     
 }
@@ -370,8 +371,12 @@ pull_docker_image(){
 }
 ins_k8s(){
     swapoff -a
-    sed -i 's/^\/swapfile/#\/swapfile/g' /etc/fstab
+    sed -i 's/\([a-z/\\\.]\+swap\.\+\)/#\1/g' /etc/fstab
+    if ! grep -q '^swapoff' /etc/rc.local  ; then
+        sed -i "/exit/i\swapoff -a #bxc script" /etc/rc.local
+    fi
     if ! check_k8s ; then
+        init
         if [[ "$PG" == "apt" ]]; then
             _k8s_ins_apt
         elif [[ "$PG" == "yum" ]]; then
@@ -871,8 +876,12 @@ _only_net_get_image(){
         arm64  ) image_name="qinghon/bxc-net:arm64" ;;
         *      ) echoerr "No support $VDIS\n";return 4  ;;
     esac
-    echoinfo "Downloading $image_name ...\n"
-    docker pull "${image_name}"
+    if [[ $_DON_DOWN_IMAGE -eq 0 ]]; then
+        echoinfo "Downloading $image_name ...\n"
+        docker pull "${image_name}"
+    else
+        echowarn "Skip $image_name download\n"
+    fi
     if ! docker images --format "{{.Repository}}"|grep -q 'qinghon/bxc-net' ; then
         echoerr "pull failed,exit!,you can try: docker pull ${image_name}\n"
         return 1
@@ -1171,7 +1180,7 @@ mg(){
     
     tun0exits=$(ip link show tun0 >/dev/null 2>&1 ;echo $?)
     [[ ${network_file_have} -eq 0 ]] &&tun0exits=$(ip link show tun0 >/dev/null 2>&1 ;echo $?)
-    [[ ${network_docker} -eq 0  && -n "${network_con_id}" ]] &&tun0exits=$(docker exec -i "${network_con_id}" /bin/sh -c "ip link show dev tun0>/dev/null;echo $?")
+    [[ ${network_docker} -eq 0  && -n "${network_con_id}" ]] &&tun0exits=$(docker exec -i "${network_con_id}" /bin/sh -c "ip link show dev tun0>/dev/null 2>&1;echo $?")
     [[ $network_file_have -ne 0 && -z "${network_con_id}" ]] &&tun0exits=1
 
     goproxy_progress=$(goproxy_check >/dev/null 2>&1 ;echo $?)
@@ -1252,6 +1261,7 @@ en_us_help=(
     "    -e             Set interfaces name to ethx,only x86_64 and using grub"
     "    -g             Install network job only"
     "     └── -H        Set ip for container"
+    "     └── -M        skip bxc-net docker image download"
     "     └── -e        export only network job certificate"
     "     └── -i        import only network job certificate"
     "    -A             Install all task component"
@@ -1278,6 +1288,7 @@ zh_cn_help=(
     "    -e             设置网卡名称为ethx格式,仅支持使用grub的x86设备"
     "    -g             仅安装网络任务"
     "     └── -H        网络容器指定IP"
+    "     └── -M        跳过bxc-net镜像下载"
     "     └── -e        导出单网络任务证书"
     "     └── -i        导入单网络任务证书"
     "    -A             安装所有计算任务组件"
@@ -1335,13 +1346,14 @@ _SET_ETHX=0
 _DON_SET_DISK=0
 _SET_IP_ADDRESS=0
 _SHOW_HELP=0
+_DON_DOWN_IMAGE=0
 #_TEST=0
 
 if [[ $# == 0 ]]; then
     install_all
 fi
 
-while  getopts "bdiknrstceghAI:DSHL:" opt ; do
+while  getopts "bdiknrstceghAI:DSHL:M" opt ; do
     case $opt in
         i ) _INIT=1         ;;
         b ) _BOUND=1        ;;
@@ -1358,6 +1370,7 @@ while  getopts "bdiknrstceghAI:DSHL:" opt ; do
         A ) install_all     ;;
         D ) _DON_SET_DISK=1 ;;
         I ) _select_interface "${OPTARG}" ;;
+        M ) _DON_DOWN_IMAGE=1 ;;
         S ) DISPLAYINFO="1" ;;
         H ) _SET_IP_ADDRESS=1   ;;
         L ) _LANG="${OPTARG}"   ;;
