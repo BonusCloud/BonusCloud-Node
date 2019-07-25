@@ -104,7 +104,7 @@ sysArch(){
     return 0
 }
 sys_codename(){
-    if  which lsb_release >/dev/null ; then
+    if  which lsb_release >/dev/null  2>&1; then
         OS_CODENAME=$(lsb_release -cs)
     fi
 }
@@ -113,7 +113,7 @@ run_as_root(){
     if [[ $(id -u) -eq 0 ]]; then
         return 0
     fi
-    if which sudo >/dev/null ; then
+    if which sudo >/dev/null 2>&1; then
         echoerr "Please run as sudo:\nsudo bash $0 $1\n"
         exit 1
     else
@@ -124,23 +124,23 @@ run_as_root(){
 env_check(){
     # 检查环境
     # Detection package manager
-    if which apt >/dev/null ; then
+    if which apt >/dev/null 2>&1 ; then
         echoinfo "Find apt\n"
         PG="apt"
-    elif which yum >/dev/null ; then
+    elif which yum >/dev/null 2>&1 ; then
         echoinfo "Find yum\n"
         PG="yum"
-    elif which pacman>/dev/null ; then
+    elif which pacman>/dev/null 2>&1 ; then
         log "[info]" "Find pacman"
         PG="pacman"
     else
         log "[error]" "\"apt\" or \"yum\" ,not found ,exit "
         exit 1
     fi
-    ret_c=$(which curl >/dev/null;echo $?)
-    ret_w=$(which wget >/dev/null;echo $?)
+    ret_c=$(which curl >/dev/null 2>&1;echo $?)
+    ret_w=$(which wget >/dev/null 2>&1;echo $?)
     case ${PG} in
-        apt ) $PG install -y curl wget apt-transport-https pciutils bc;;
+        apt ) $PG install -y curl wget apt-transport-https pciutils;;
         yum ) $PG install -y curl wget ;;
     esac
     # Check if the system supports
@@ -313,7 +313,7 @@ jq_yum_ins(){
 }
 ins_jq(){
     # 安装jq json文件分析工具
-    if which jq>/dev/null; then
+    if which jq>/dev/null 2>&1; then
         return
     fi
     env_check
@@ -322,6 +322,9 @@ ins_jq(){
         yum     ) jq_yum_ins ;;
         pacman  ) $PG -S jq ;;
     esac
+    if ! which jq>/dev/null 2>&1; then
+        echoerr "jq install fail,please check you package sources and try \`$PG install jq -y\`\n"
+    fi
 }
 init(){
     # 初始化目录/文件
@@ -555,7 +558,7 @@ bxc-network_run(){
 }
 goproxy_ins(){
     # 安装goproxy本地代理程序
-    if which proxy>/dev/null ; then
+    if which proxy>/dev/null 2>&1; then
         return 0
     fi
     LAST_VERSION=$(curl --silent "https://api.github.com/repos/snail007/goproxy/releases/latest" | grep -Po '"tag_name": "\K.*?(?=")')
@@ -759,7 +762,7 @@ only_net_set_bridge(){
     LINK_SUBNET=$(ip addr show "${LINK}"|grep 'inet '|awk '{print $2}')
     LINK_HOSTIP=$(echo "${LINK_SUBNET}"|awk -F/ '{print $1}')
     only_net_set_promisc "$LINK"
-    echoinfo "Set ip range(设置IP范围):";read -r -e -i "${LINK_SUBNET}" SET_RANGE
+    echoinfo "Set ip range(设置IP范围):\n";read -r -e -i "${LINK_SUBNET}" SET_RANGE
     echo "docker network create -d macvlan --subnet=\"${LINK_SUBNET}\" \
     --gateway=\"${LINK_GW}\" --aux-address=\"exclude_host=${LINK_HOSTIP}\" \
     --ip-range=\"${SET_RANGE}\" \
@@ -833,7 +836,7 @@ only_ins_network_docker_run(){
     # 运行命令
     con_id=$(run_command "$command")
     if [[ -z $con_id ]]; then
-        return 1
+        return 2
     fi
     echo "${con_id}"
     sleep 3
@@ -843,14 +846,14 @@ only_ins_network_docker_run(){
         echoerr "bound fail\n${fail_log}\n"
         docker stop "${con_id}"
         docker rm "${con_id}"
-        return 
+        return 3
     fi
     # 检测是否为mac问题导致不能running,并清除
     create_status=$(docker container inspect "${con_id}" --format "{{.State.Status}}")
     if [[ "$create_status" == "created" ]]; then
         echowarn "Delete can not run container\n"
         docker container rm "${con_id}"
-        return 
+        return 4
     else
         # 运行成功时,修改自身脚本定义的mac头为可用头
         if [[ -z $mac_head ]]; then
