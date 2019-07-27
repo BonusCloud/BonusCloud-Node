@@ -443,6 +443,7 @@ WantedBy=multi-user.target
 EOF
 }
 node_ins(){
+    mkdir -p $BASE_DIR/{scripts,nodeapi,compute}
     # 安装node组件
     # 区分kernel版本下载文件
     kel_v=$(uname -r|grep -E -o '([0-9]+\.){2}[0-9]')
@@ -482,8 +483,10 @@ node_ins(){
         fi
         log "[info]" " $TMP/$git_file_name download success."
         cp -fv $TMP/"$git_file_name" "$file_path" 2> /dev/null
-        rm -v "$TMP/$git_file_name" 2>/dev/null
         chmod "$mod" "$file_path" > /dev/null            
+        if [[ -x "$file_path" ]]; then
+            rm -v "$TMP/$git_file_name"
+        fi
     done
     rm -v "$TMP/info.txt"
     _set_node_systemd
