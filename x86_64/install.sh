@@ -104,7 +104,7 @@ sysArch(){
     return 0
 }
 sys_codename(){
-    if  which lsb_release >/dev/null ; then
+    if  which lsb_release >/dev/null  2>&1; then
         OS_CODENAME=$(lsb_release -cs)
     fi
 }
@@ -113,7 +113,7 @@ run_as_root(){
     if [[ $(id -u) -eq 0 ]]; then
         return 0
     fi
-    if which sudo >/dev/null ; then
+    if which sudo >/dev/null 2>&1; then
         echoerr "Please run as sudo:\nsudo bash $0 $1\n"
         exit 1
     else
@@ -124,23 +124,23 @@ run_as_root(){
 env_check(){
     # 检查环境
     # Detection package manager
-    if which apt >/dev/null ; then
+    if which apt >/dev/null 2>&1 ; then
         echoinfo "Find apt\n"
         PG="apt"
-    elif which yum >/dev/null ; then
+    elif which yum >/dev/null 2>&1 ; then
         echoinfo "Find yum\n"
         PG="yum"
-    elif which pacman>/dev/null ; then
+    elif which pacman>/dev/null 2>&1 ; then
         log "[info]" "Find pacman"
         PG="pacman"
     else
         log "[error]" "\"apt\" or \"yum\" ,not found ,exit "
         exit 1
     fi
-    ret_c=$(which curl >/dev/null;echo $?)
-    ret_w=$(which wget >/dev/null;echo $?)
+    ret_c=$(which curl >/dev/null 2>&1;echo $?)
+    ret_w=$(which wget >/dev/null 2>&1;echo $?)
     case ${PG} in
-        apt ) $PG install -y curl wget apt-transport-https ;;
+        apt ) $PG install -y curl wget apt-transport-https pciutils;;
         yum ) $PG install -y curl wget ;;
     esac
     # Check if the system supports
@@ -150,7 +150,15 @@ env_check(){
     OS_line=$($TMP/screenfetch -n |grep 'OS:')
     OS=$(echo "$OS_line"|awk '{print $3}'|tr '[:upper:]' '[:lower:]')
     if [[ -z "$OS" ]]; then
-        read -r -p "The release version is not detected, please enter it manually,like \"ubuntu\"" OS
+        source /etc/os-release
+        if echo "${support_os[@]}"|grep -w "$ID" &>/dev/null  ; then
+            OS="$ID"
+            case $ID in
+                ubuntu ) OS_CODENAME="$VERSION_CODENAME" ;;
+            esac
+        else
+            read -r -p "The release version is not detected, please enter it manually,like \"ubuntu\"" OS
+        fi
     fi
     if ! echo "${support_os[@]}"|grep -w "$OS" &>/dev/null ; then
         log "[error]" "This system is not supported by docker, exit"
@@ -193,9 +201,9 @@ check_doc(){
 }
 check_k8s(){
     # 检查k8s安装状态和版本
-    reta=$(which kubeadm>/dev/null;echo $?)
-    retl=$(which kubelet>/dev/null;echo $?)
-    retc=$(which kubectl>/dev/null;echo $?)
+    reta=$(which kubeadm>/dev/null 2>&1;echo $?)
+    retl=$(which kubelet>/dev/null 2>&1;echo $?)
+    retc=$(which kubectl>/dev/null 2>&1;echo $?)
     if [ "${reta}" -ne 0 ] || [ "${retl}" -ne 0 ] || [ "${retc}" -ne 0 ] ; then
         log "[info]" "k8s not found"
         return 1
@@ -305,7 +313,7 @@ jq_yum_ins(){
 }
 ins_jq(){
     # 安装jq json文件分析工具
-    if which jq>/dev/null; then
+    if which jq>/dev/null 2>&1; then
         return
     fi
     env_check
@@ -314,6 +322,9 @@ ins_jq(){
         yum     ) jq_yum_ins ;;
         pacman  ) $PG -S jq ;;
     esac
+    if ! which jq>/dev/null 2>&1; then
+        echoerr "jq install fail,please check you package sources and try \`$PG install jq -y\`\n"
+    fi
 }
 init(){
     # 初始化目录/文件
@@ -341,6 +352,7 @@ gpgkey=https://mirrors.aliyun.com/kubernetes/yum/doc/yum-key.gpg https://mirrors
 EOF
     setenforce 0
     yum install  -y kubelet-1.12.3 kubeadm-1.12.3 kubectl-1.12.3 kubernetes-cni-0.6.0
+    yum --exclude kubelet kubeadm kubectl kubernetes-cni
     systemctl enable kubelet && systemctl start kubelet
     
 }
@@ -362,8 +374,12 @@ pull_docker_image(){
 }
 ins_k8s(){
     swapoff -a
-    sed -i 's/^\/swapfile/#\/swapfile/g' /etc/fstab
+    sed -i 's/\([a-z/\\\.]\+swap\.\+\)/#\1/g' /etc/fstab
+    if ! grep -q '^swapoff' /etc/rc.local  ; then
+        sed -i "/exit/i\swapoff -a #bxc script" /etc/rc.local
+    fi
     if ! check_k8s ; then
+        init
         if [[ "$PG" == "apt" ]]; then
             _k8s_ins_apt
         elif [[ "$PG" == "yum" ]]; then
@@ -427,6 +443,7 @@ WantedBy=multi-user.target
 EOF
 }
 node_ins(){
+    mkdir -p $BASE_DIR/{scripts,nodeapi,compute}
     # 安装node组件
     # 区分kernel版本下载文件
     kel_v=$(uname -r|grep -E -o '([0-9]+\.){2}[0-9]')
@@ -435,7 +452,7 @@ node_ins(){
         Rlink="$Rlink/5.0.0-aml-N1-BonusCloud"
     fi
     # 下载文件列表
-    down "$Rlink/info.txt" "$TMP/info.txt"
+    [[ ! -f $TMP/info.txt ]]&&down "$Rlink/info.txt" "$TMP/info.txt"
     if [ ! -s "$TMP/info.txt" ]; then
         log "[error]" "wget \"$Rlink/info.txt\" -O $TMP/info.txt"
         return 1
@@ -453,17 +470,25 @@ node_ins(){
             log "[info]" "local file $file_path version equal git file version,skip"
             continue
         fi
-        down "$Rlink/$git_file_name" "$TMP/$git_file_name" 
+        tmp_md5=$([ -f "$file_path" ] &&md5sum "$TMP/$git_file_name"| awk '{print $1}')
+        if [[ ! -f $TMP/$git_file_name || "$tmp_md5" != "$git_md5_val" ]] ;then
+            down "$Rlink/$git_file_name" "$TMP/$git_file_name"
+        else
+            log "[info]" "local file $TMP/$git_file_name md5sum equal remote md5sum "
+        fi 
         download_md5=$(md5sum $TMP/"$git_file_name" | awk '{print $1}')
         if [ "$download_md5"x != "$git_md5_val"x ];then
             log "[error]" " download file $TMP/$git_file_name md5 $download_md5 different from git md5 $git_md5_val"
             continue
-        else
-            log "[info]" " $TMP/$git_file_name download success."
-            cp -f $TMP/"$git_file_name" "$file_path" > /dev/null
-            chmod "$mod" "$file_path" > /dev/null            
+        fi
+        log "[info]" " $TMP/$git_file_name download success."
+        cp -fv $TMP/"$git_file_name" "$file_path" 2> /dev/null
+        chmod "$mod" "$file_path" > /dev/null            
+        if [[ -x "$file_path" ]]; then
+            rm -v "$TMP/$git_file_name"
         fi
     done
+    rm -v "$TMP/info.txt"
     _set_node_systemd
     systemctl daemon-reload
     systemctl enable bxc-node
@@ -536,7 +561,7 @@ bxc-network_run(){
 }
 goproxy_ins(){
     # 安装goproxy本地代理程序
-    if which proxy>/dev/null ; then
+    if which proxy>/dev/null 2>&1; then
         return 0
     fi
     LAST_VERSION=$(curl --silent "https://api.github.com/repos/snail007/goproxy/releases/latest" | grep -Po '"tag_name": "\K.*?(?=")')
@@ -630,6 +655,12 @@ teleport_remove(){
     systemctl stop teleport
     rm -f /lib/systemd/system/teleport.service
     rm -f /etc/systemd/system/teleport.service
+}
+iostat_ins(){
+    case $PG in
+        apt ) apt update&&apt install sysstat -y ;;
+        yum ) yum install sysstat -y ;;
+    esac
 }
 read_bcode_input(){
     # 交互输入bcode
@@ -734,7 +765,7 @@ only_net_set_bridge(){
     LINK_SUBNET=$(ip addr show "${LINK}"|grep 'inet '|awk '{print $2}')
     LINK_HOSTIP=$(echo "${LINK_SUBNET}"|awk -F/ '{print $1}')
     only_net_set_promisc "$LINK"
-    echoinfo "Set ip range(设置IP范围):";read -r -e -i "${LINK_SUBNET}" SET_RANGE
+    echoinfo "Set ip range(设置IP范围):\n";read -r -e -i "${LINK_SUBNET}" SET_RANGE
     echo "docker network create -d macvlan --subnet=\"${LINK_SUBNET}\" \
     --gateway=\"${LINK_GW}\" --aux-address=\"exclude_host=${LINK_HOSTIP}\" \
     --ip-range=\"${SET_RANGE}\" \
@@ -808,7 +839,7 @@ only_ins_network_docker_run(){
     # 运行命令
     con_id=$(run_command "$command")
     if [[ -z $con_id ]]; then
-        return 1
+        return 2
     fi
     echo "${con_id}"
     sleep 3
@@ -818,14 +849,14 @@ only_ins_network_docker_run(){
         echoerr "bound fail\n${fail_log}\n"
         docker stop "${con_id}"
         docker rm "${con_id}"
-        return 
+        return 3
     fi
     # 检测是否为mac问题导致不能running,并清除
     create_status=$(docker container inspect "${con_id}" --format "{{.State.Status}}")
     if [[ "$create_status" == "created" ]]; then
         echowarn "Delete can not run container\n"
         docker container rm "${con_id}"
-        return 
+        return 4
     else
         # 运行成功时,修改自身脚本定义的mac头为可用头
         if [[ -z $mac_head ]]; then
@@ -851,8 +882,12 @@ _only_net_get_image(){
         arm64  ) image_name="qinghon/bxc-net:arm64" ;;
         *      ) echoerr "No support $VDIS\n";return 4  ;;
     esac
-    echoinfo "Downloading $image_name ...\n"
-    docker pull "${image_name}"
+    if [[ $_DON_DOWN_IMAGE -eq 0 ]]; then
+        echoinfo "Downloading $image_name ...\n"
+        docker pull "${image_name}"
+    else
+        echowarn "Skip $image_name download\n"
+    fi
     if ! docker images --format "{{.Repository}}"|grep -q 'qinghon/bxc-net' ; then
         echoerr "pull failed,exit!,you can try: docker pull ${image_name}\n"
         return 1
@@ -1075,12 +1110,12 @@ set_interfaces_name(){
 _show_info(){
     Status="$1"
     num=$2
-    ID="$3"
+    con_ID="$3"
     have_tun0=$4
     ip_addr="$5"
     mac_addr="$6"
     if [[ "$Status" != "running" || $have_tun0 -ne 0 ]]; then
-        echoerr "${num}  ${Status}\ttun0 not create\t$ID\t\t${mac_addr}\t\n"
+        echoerr "${num}  ${Status}\ttun0 not create\t$con_ID\t\t${mac_addr}\t\n"
     else
         echoinfo "${num}  ${Status}\t\ttun0 run\t${ip_addr}\t${mac_addr}\n"
     fi
@@ -1151,7 +1186,7 @@ mg(){
     
     tun0exits=$(ip link show tun0 >/dev/null 2>&1 ;echo $?)
     [[ ${network_file_have} -eq 0 ]] &&tun0exits=$(ip link show tun0 >/dev/null 2>&1 ;echo $?)
-    [[ ${network_docker} -eq 0  && -n "${network_con_id}" ]] &&tun0exits=$(docker exec -i "${network_con_id}" /bin/sh -c "ip link show dev tun0>/dev/null;echo $?")
+    [[ ${network_docker} -eq 0  && -n "${network_con_id}" ]] &&tun0exits=$(docker exec -i "${network_con_id}" /bin/sh -c "ip link show dev tun0>/dev/null 2>&1;echo $?")
     [[ $network_file_have -ne 0 && -z "${network_con_id}" ]] &&tun0exits=1
 
     goproxy_progress=$(goproxy_check >/dev/null 2>&1 ;echo $?)
@@ -1232,8 +1267,10 @@ en_us_help=(
     "    -e             Set interfaces name to ethx,only x86_64 and using grub"
     "    -g             Install network job only"
     "     └── -H        Set ip for container"
+    "     └── -M        skip bxc-net docker image download"
     "     └── -e        export only network job certificate"
     "     └── -i        import only network job certificate"
+    "    -A             Install all task component"
     "    -D             Don't set disk for node program"
     "    -I Interface   set interface name to you want"
     "    -S             show Info level output"
@@ -1257,8 +1294,10 @@ zh_cn_help=(
     "    -e             设置网卡名称为ethx格式,仅支持使用grub的x86设备"
     "    -g             仅安装网络任务"
     "     └── -H        网络容器指定IP"
+    "     └── -M        跳过bxc-net镜像下载"
     "     └── -e        导出单网络任务证书"
     "     └── -i        导入单网络任务证书"
+    "    -A             安装所有计算任务组件"
     "    -D             不初始化外挂硬盘"
     "    -I Interface   指定安装时使用的网卡"
     "    -S             显示Info等级日志"
@@ -1284,10 +1323,18 @@ displayhelp(){
     done
     exit 0
 }
+install_all(){
+    _INIT=1
+    _DOCKER_INS=1
+    _NODE_INS=1
+    _TELEPORT=1
+    _K8S_INS=1
+    _NET_CONF=1
+    _SYSSTAT=1
+}
 
 DISPLAYINFO="0"
 _LANG="${LANG}"
-
 _SYSARCH=1
 _INIT=0
 _NET_CONF=0
@@ -1295,6 +1342,7 @@ _DOCKER_INS=0
 _NODE_INS=0
 _REMOVE=0
 _TELEPORT=0
+_SYSSTAT=0
 _CHANGE_KN=0
 _ONLY_NET=0
 _K8S_INS=0
@@ -1304,17 +1352,14 @@ _SET_ETHX=0
 _DON_SET_DISK=0
 _SET_IP_ADDRESS=0
 _SHOW_HELP=0
+_DON_DOWN_IMAGE=0
+#_TEST=0
 
 if [[ $# == 0 ]]; then
-    _INIT=1
-    _DOCKER_INS=1
-    _NODE_INS=1
-    _TELEPORT=1
-    _K8S_INS=1
-    _NET_CONF=1
+    install_all
 fi
 
-while  getopts "bdiknrstceghI:DSHL:" opt ; do
+while  getopts "bdiknrstceghAI:DSHL:M" opt ; do
     case $opt in
         i ) _INIT=1         ;;
         b ) _BOUND=1        ;;
@@ -1328,12 +1373,13 @@ while  getopts "bdiknrstceghI:DSHL:" opt ; do
         t ) _SHOW_STATUS=1  ;;
         g ) _ONLY_NET=1     ;;
         h ) _SHOW_HELP=1    ;;
+        A ) install_all     ;;
         D ) _DON_SET_DISK=1 ;;
         I ) _select_interface "${OPTARG}" ;;
+        M ) _DON_DOWN_IMAGE=1 ;;
         S ) DISPLAYINFO="1" ;;
         H ) _SET_IP_ADDRESS=1   ;;
         L ) _LANG="${OPTARG}"   ;;
-        h ) _SHOW_HELP=1    ;;
         ? ) echoerr "Unknow arg. exiting" ;displayhelp; exit 1 ;;
     esac
 done
@@ -1346,6 +1392,7 @@ done
 [[ $_DOCKER_INS -eq 1 ]]    &&ins_docker
 [[ $_NODE_INS -eq 1 ]]      &&node_ins
 [[ $_TELEPORT -eq 1 ]]      &&teleport_ins
+[[ $_SYSSTAT -eq 1 ]]       &&iostat_ins
 [[ $_CHANGE_KN -eq 1 ]]     &&ins_kernel
 [[ $_ONLY_NET -eq 1 ]]      &&only_ins_network_choose_plan
 [[ $_K8S_INS -eq 1 ]]       &&ins_k8s
