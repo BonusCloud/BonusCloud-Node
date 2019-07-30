@@ -260,7 +260,12 @@ ins_docker(){
     if [[ "$PG" == "apt" ]]; then
         # Install docker with APT
         # apt 安装docker
+        apt install gnupg2 -y
         curl -fsSL "https://download.docker.com/linux/$OS/gpg" | apt-key add -
+        if [[ $? -ne 0 ]]; then
+            echoerr "add source public key failed ,check you network\n添加docker源公钥失败,检查您的网络配置,必要时请将download.docker.com加入代理\n"
+            return 2
+        fi
         echo "deb https://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/$OS  $OS_CODENAME stable"  >/etc/apt/sources.list.d/docker.list
         apt update
         # 遍历版本号,安装不能超过限制的版本
@@ -988,6 +993,10 @@ only_net_cert_import_run(){
             continue
         fi
         bcode_=$(echo "$info"|jq -r '.bcode')
+        if docker inspect "bxc-$bcode_">/dev/null 2>&1; then
+            echoinfo "container $bcode_ already exists\n"
+            continue 
+        fi
         email_=$(echo "$info"|jq -r '.email')
         mac_addr_=$(echo "$info"|jq -r '.mac_address')
         only_ins_network_docker_run "$bcode_" "$email_" "$mac_addr_"
@@ -1006,6 +1015,10 @@ only_net_cert_import(){
 
         filename=$(basename "$i")
         bcode=$(echo "$i"|grep -E -o "[0-9a-f]{4}-[0-9a-f]{8}-([0-9a-f]{4}-){2}[0-9a-f]{4}-[0-9a-f]{12}")
+        if docker volume inspect "bxc_data_$bcode" >/dev/null 2>&1 ; then
+            echoinfo "certificate $bcode already exists \n"
+            continue
+        fi
         [[ -z $bcode ]]&& echoerr "can not get bcode for $i" && continue
         echoinfo "importing\t$bcode ...\n"
         docker create -v "bxc_data_$bcode":/opt/bcloud --name "bxc_date_tmp_$bcode" qinghon/bxc-net:$VDIS true 1>/dev/null 
