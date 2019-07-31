@@ -519,13 +519,13 @@ bxc-network_ins(){
     ret_4=$(apt list libcurl4 2>/dev/null|grep -q installed;echo $?)
     if [[ ${ret_4} -eq 0 ]]; then
         log "[info]" "Install libcurl4 library bxc-network"
-        down "img-modules/bxc-network_x86_64" "${BASE_DIR}/bxc-network"
+        down "img-modules/bxc-network_$ARCH" "${BASE_DIR}/bxc-network"
         chmod +x ${BASE_DIR}/bxc-network
     fi
     ret_3=$(apt list libcurl3 2>/dev/null|grep -q installed;echo $?)
     if [[ ${ret_3} -eq 0 ]]; then
         log "[info]" "Install libcurl3 library bxc-network"
-        down "img-modules/5.0.0-aml-N1-BonusCloud/bxc-network_x86_64" "${BASE_DIR}/bxc-network"
+        down "img-modules/5.0.0-aml-N1-BonusCloud/bxc-network_$ARCH" "${BASE_DIR}/bxc-network"
         chmod +x ${BASE_DIR}/bxc-network
     fi
     apt install -y liblzo2-2 libjson-c3 
