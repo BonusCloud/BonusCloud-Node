@@ -825,7 +825,7 @@ only_ins_network_docker_run(){
         local set_ipaddress
         local ipaddress
         echoinfo "Set ip address:\n" ;read -r ipaddress
-        set_ipaddress="--ip=\"${ipaddress}\""
+        set_ipaddress="--ip=${ipaddress}"
     else
         set_ipaddress=''
     fi
