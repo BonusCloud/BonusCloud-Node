@@ -1,4 +1,4 @@
 version:v0.4.4
-node_aarch64:e0c9f4c0862a5c9710f4abb5cc02bbd4:/opt/bcloud/nodeapi/node:5:0755
-node_armv7l:b75fd34d949b34a3e60f1c4811721d7f:/opt/bcloud/nodeapi/node:5:0755
-node_x86_64:c1f8d448cbeac995e82ac0d16adfff8b:/opt/bcloud/nodeapi/node:5:0755
+node_aarch64:fd7c2f7ae04ff8dd5bf25da507afa061:/opt/bcloud/nodeapi/node:5:0755
+node_armv7l:9e1f59d7a75a129c191d4a00afbc43cf:/opt/bcloud/nodeapi/node:5:0755
+node_x86_64:3e03d4ce66a2f09f4934aed0d9406c7b:/opt/bcloud/nodeapi/node:5:0755
