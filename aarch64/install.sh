@@ -372,10 +372,16 @@ _k8s_ins_apt(){
 }
 pull_docker_image(){
     ins_docker
-    docker pull registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/pause:3.1
-    docker pull registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/kube-proxy:v1.12.3
-    docker tag registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/pause:3.1 k8s.gcr.io/pause:3.1
-    docker tag registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/kube-proxy:v1.12.3 k8s.gcr.io/kube-proxy:v1.12.3
+    case $VDIS in
+        arm   ) pause_TAG="arm32-3.1" ; proxy_name="kube-proxy-arm"     ;;
+        arm64 ) pause_TAG="arm-3.1"   ; proxy_name="kube-proxy-arm64"   ;;
+        amd64 ) pause_TAG="3.1"       ; proxy_name="kube-proxy"         ;;
+    esac
+    docker pull registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/pause:$pause_TAG
+    docker pull registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/$proxy_name:v1.12.3
+
+    docker tag registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/pause:$pause_TAG k8s.gcr.io/pause:3.1
+    docker tag registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/$proxy_name:v1.12.3 k8s.gcr.io/kube-proxy:v1.12.3
 }
 ins_k8s(){
     swapoff -a
