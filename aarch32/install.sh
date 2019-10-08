@@ -340,6 +340,12 @@ init(){
     env_check
     check_info
 }
+_lvm_ins(){
+    case $PG in
+        apt ) apt install -y lvm2;;
+        yum ) yum install -y lvm2;;
+    esac
+}
 _k8s_ins_yum(){
     cat <<EOF > /etc/yum.repos.d/kubernetes.repo
 [kubernetes]
@@ -397,6 +403,7 @@ ins_k8s(){
     else
         log "[info]" " k8s was found! skip"
     fi
+    _lvm_ins
     pull_docker_image
     cat <<EOF >  /etc/sysctl.d/k8s.conf
 vm.swappiness = 0
@@ -1328,6 +1335,7 @@ en_us_help=(
     "    -D             Don't set disk for node program"
     "    -I Interface   set interface name to you want"
     "    -S             show Info level output"
+    "    -Z function    run the specified function"
     " "
     "When no parameters are added, the calculation task component is installed "
     "by default. If the parameter \"only install\" is added, the corresponding "
@@ -1355,6 +1363,7 @@ zh_cn_help=(
     "    -D             不初始化外挂硬盘"
     "    -I Interface   指定安装时使用的网卡"
     "    -S             显示Info等级日志"
+    "    -Z function    运行指定函数"
     " "
     "不加参数时,默认安装计算任务组件,如加了\"仅安装..\"等参数时将安装对应组件")
 
