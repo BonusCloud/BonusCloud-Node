@@ -3,6 +3,11 @@
 ```
 wget https://raw.githubusercontent.com/qinghon/BonusCloud-Node/master/x86_64/install.sh -O install.sh&&sudo bash install.sh
 ```
+备用腾讯云源，但是先要注册账号，🤢
+```
+wget https://git.code.tencent.com/BonusCloud/BonusCloud-Node/raw/master/x86_64/install.sh -O install.sh&&sudo bash install.sh
+```
+
 ### 卸载/清除
 ```
 wget https://raw.githubusercontent.com/qinghon/BonusCloud-Node/master/x86_64/install.sh -O install.sh&&sudo bash install.sh -r
