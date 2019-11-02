@@ -42,7 +42,7 @@ support_os=(
 )
 mirror_pods=(
     "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master"
-    "https://raw.githubusercontent.com/qinghon/BonusCloud-Node/master"
+    "https://git.code.tencent.com/BonusCloud/BonusCloud-Node/raw/master"
 )
 
 
