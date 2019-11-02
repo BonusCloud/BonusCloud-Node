@@ -4,7 +4,11 @@
 ### install
 Run as shell
 ```
-wget https://raw.githubusercontent.com/qinghon/BonusCloud-Node/master/x86_64/install.sh -O install.sh&&sudo bash install.sh
+wget https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/x86_64/install.sh -O install.sh&&sudo bash install.sh
+```
+tencent source, need register first
+```
+wget https://git.code.tencent.com/BonusCloud/BonusCloud-Node/raw/master/x86_64/install.sh -O install.sh&&sudo bash install.sh
 ```
 ### remove
 ```
