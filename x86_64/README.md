@@ -6,9 +6,9 @@ Run as shell
 ```
 wget https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/x86_64/install.sh -O install.sh&&sudo bash install.sh
 ```
-tencent source, need sign up first
+jdcloud source
 ```
-wget https://git.code.tencent.com/BonusCloud/BonusCloud-Node/raw/master/x86_64/install.sh -O install.sh&&sudo bash install.sh
+wget https://bonuscloud-node.s3.cn-north-1.jdcloud-oss.com/x86_64/install.sh -O install.sh&&sudo bash install.sh
 ```
 ### remove
 ```
