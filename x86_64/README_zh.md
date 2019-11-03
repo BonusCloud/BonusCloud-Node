@@ -1,7 +1,7 @@
 ### 安装
 在Shell里运行
 ```
-wget https://raw.githubusercontent.com/qinghon/BonusCloud-Node/master/x86_64/install.sh -O install.sh&&sudo bash install.sh
+wget https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/x86_64/install.sh -O install.sh&&sudo bash install.sh
 ```
 备用京东云源
 ```
