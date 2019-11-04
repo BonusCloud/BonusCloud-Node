@@ -3,11 +3,15 @@
 ### 安装
 在Shell里运行
 ```
-wget https://raw.githubusercontent.com/qinghon/BonusCloud-Node/master/aarch32/install.sh -O install.sh&&sudo bash install.sh
+wget https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/aarch32/install.sh -O install.sh&&sudo bash install.sh
+```
+京东云备份
+```
+wget https://bonuscloud-node.s3.cn-north-1.jdcloud-oss.com/aarch32/install.sh -O install.sh&&sudo bash install.sh
 ```
 ### 卸载/清除
 ```
-wget https://raw.githubusercontent.com/qinghon/BonusCloud-Node/master/aarch32/install.sh -O install.sh&&sudo bash install.sh remove
+wget https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/aarch32/install.sh -O install.sh&&sudo bash install.sh remove
 ```
 
 以下系统通过测试

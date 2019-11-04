@@ -4,11 +4,15 @@
 ### install
 Run as shell
 ```
-wget https://raw.githubusercontent.com/qinghon/BonusCloud-Node/master/x86_64/install.sh -O install.sh&&sudo bash install.sh
+wget https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/x86_64/install.sh -O install.sh&&sudo bash install.sh
+```
+jdcloud source
+```
+wget https://bonuscloud-node.s3.cn-north-1.jdcloud-oss.com/x86_64/install.sh -O install.sh&&sudo bash install.sh
 ```
 ### remove
 ```
-wget https://raw.githubusercontent.com/qinghon/BonusCloud-Node/master/x86_64/install.sh -O install.sh&&sudo bash install.sh remove
+wget https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/x86_64/install.sh -O install.sh&&sudo bash install.sh remove
 ```
 
 The system passed the test

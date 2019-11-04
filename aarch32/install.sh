@@ -42,7 +42,7 @@ support_os=(
 )
 mirror_pods=(
     "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master"
-    "https://raw.githubusercontent.com/qinghon/BonusCloud-Node/master"
+    "https://bonuscloud-node.s3.cn-north-1.jdcloud-oss.com"
 )
 
 
@@ -148,7 +148,7 @@ env_check(){
     esac
     # Check if the system supports
     # 使用screenfetch工具检测系统发行版
-    [ ! -s $TMP/screenfetch ]&&wget  -nv -O $TMP/screenfetch "https://raw.githubusercontent.com/KittyKatt/screenFetch/master/screenfetch-dev" 
+    [[ ! -s $TMP/screenfetch ]]&&down "screenfetch-dev" "$TMP/screenfetch"
     chmod +x $TMP/screenfetch
     OS_line=$($TMP/screenfetch -n |grep 'OS:')
     OS=$(echo "$OS_line"|awk '{print $3}'|tr '[:upper:]' '[:lower:]')
@@ -174,7 +174,7 @@ down(){
     # 根据设置的源下载文件,错误时切换源
     for link in "${mirror_pods[@]}"; do
         
-        if wget "${link}/$1" -O "$2" ; then
+        if wget -t 2 --timeout=3 "${link}/$1" -O "$2" ; then
             break
         else
             continue

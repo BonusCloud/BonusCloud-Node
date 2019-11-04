@@ -1,11 +1,16 @@
 ### 安装
 在Shell里运行
 ```
-wget https://raw.githubusercontent.com/qinghon/BonusCloud-Node/master/x86_64/install.sh -O install.sh&&sudo bash install.sh
+wget https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/x86_64/install.sh -O install.sh&&sudo bash install.sh
 ```
+备用京东云源
+```
+wget https://bonuscloud-node.s3.cn-north-1.jdcloud-oss.com/x86_64/install.sh -O install.sh&&sudo bash install.sh
+```
+
 ### 卸载/清除
 ```
-wget https://raw.githubusercontent.com/qinghon/BonusCloud-Node/master/x86_64/install.sh -O install.sh&&sudo bash install.sh -r
+wget https://raw.githubusercontent.com/Bonuscloud/BonusCloud-Node/master/x86_64/install.sh -O install.sh&&sudo bash install.sh -r
 ```
 
 以下系统通过测试
