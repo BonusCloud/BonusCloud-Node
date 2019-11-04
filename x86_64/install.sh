@@ -145,7 +145,7 @@ env_check(){
     esac
     # Check if the system supports
     # 使用screenfetch工具检测系统发行版
-    [ ! -s $TMP/screenfetch ]&&wget  -nv -O $TMP/screenfetch "https://raw.githubusercontent.com/BonusCloud/screenFetch/master/screenfetch-dev" 
+    [[ ! -s $TMP/screenfetch ]]&&down "screenfetch-dev" "$TMP/screenfetch"
     chmod +x $TMP/screenfetch
     OS_line=$($TMP/screenfetch -n |grep 'OS:')
     OS=$(echo "$OS_line"|awk '{print $3}'|tr '[:upper:]' '[:lower:]')
