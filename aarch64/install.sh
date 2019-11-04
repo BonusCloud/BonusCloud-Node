@@ -171,7 +171,7 @@ down(){
     # 根据设置的源下载文件,错误时切换源
     for link in "${mirror_pods[@]}"; do
         
-        if wget "${link}/$1" -O "$2" ; then
+        if wget -t 2 --timeout=3  "${link}/$1" -O "$2" ; then
             break
         else
             continue
