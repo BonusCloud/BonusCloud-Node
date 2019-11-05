@@ -3,6 +3,10 @@
 ```
 wget https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/x86_64/install.sh -O install.sh&&sudo bash install.sh
 ```
+coding.net
+```
+wget https://bonuscloud.coding.net/p/BonusCloud-Node/d/BonusCloud-Node/git/raw/master/x86_64/install.sh -O install.sh&&sudo bash install.sh
+```
 备用京东云源
 ```
 wget https://bonuscloud-node.s3.cn-north-1.jdcloud-oss.com/x86_64/install.sh -O install.sh&&sudo bash install.sh
