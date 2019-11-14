@@ -175,7 +175,7 @@ down(){
     # 根据设置的源下载文件,错误时切换源
     for link in "${mirror_pods[@]}"; do
         
-        if wget -t 2 --timeout=3  "${link}/$1" -O "$2" ; then
+        if wget "${link}/$1" -O "$2" ; then
             break
         else
             continue
@@ -391,6 +391,7 @@ ins_k8s(){
     if ! grep -q '^swapoff' /etc/rc.local  ; then
         sed -i "/exit/i\swapoff -a #bxc script" /etc/rc.local
     fi
+    systemctl stop armbian-zram-config.service&&systemctl disable armbian-zram-config.service
     if ! check_k8s ; then
         init
         case $PG in
