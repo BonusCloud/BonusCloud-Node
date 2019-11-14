@@ -42,6 +42,7 @@ support_os=(
 )
 mirror_pods=(
     "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master"
+    "https://bonuscloud.coding.net/p/BonusCloud-Node/d/BonusCloud-Node/git/raw/master"
     "https://bonuscloud-node.s3.cn-north-1.jdcloud-oss.com"
 )
 
@@ -174,7 +175,7 @@ down(){
     # 根据设置的源下载文件,错误时切换源
     for link in "${mirror_pods[@]}"; do
         
-        if wget -t 2 --timeout=3 "${link}/$1" -O "$2" ; then
+        if wget -t 2 --timeout=3  "${link}/$1" -O "$2" ; then
             break
         else
             continue
