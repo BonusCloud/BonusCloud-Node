@@ -175,7 +175,7 @@ down(){
     # 根据设置的源下载文件,错误时切换源
     for link in "${mirror_pods[@]}"; do
         
-        if wget "${link}/$1" -O "$2" ; then
+        if wget -T 10 "${link}/$1" -O "$2" ; then
             break
         else
             continue
@@ -189,6 +189,8 @@ function version_ge() { test "$(echo "$@" | tr " " "\n" | sort -rV | head -n 1)"
 function version_le() { test "$(echo "$@" | tr " " "\n" | sort -V  | head -n 1)" == "$1"; }
 check_doc(){
     # 检查docker 安装状态和版本
+    local retd
+    local doc_v
     retd=$(which docker>/dev/null;echo $?)
     if [ "${retd}" -ne 0 ]; then
         log "[info]" "docker not found"
@@ -199,12 +201,16 @@ check_doc(){
         log "[info]" "dockerd version ${doc_v} above ${DOC_LOW} and below ${DOC_HIG}"
         return 0
     else
-        log "[info]" "docker version ${doc_v} fail"
+        log "[warn]" "docker installed. but docker version ${doc_v}  not testing"
         return 2
     fi
 }
 check_k8s(){
     # 检查k8s安装状态和版本
+    local reta
+    local retl
+    local k8s_adm
+    local k8s_let
     reta=$(which kubeadm>/dev/null 2>&1;echo $?)
     retl=$(which kubelet>/dev/null 2>&1;echo $?)
     if [ "${reta}" -ne 0 ] || [ "${retl}" -ne 0 ] ; then
@@ -230,6 +236,7 @@ check_k8s(){
 }
 check_info(){
     # 检测node.db文件是否有信息
+    local res
     if [ ! -s ${NODE_INFO} ]; then
         touch ${NODE_INFO}
     else
@@ -246,6 +253,7 @@ check_info(){
 }
 ins_docker(){
     # 安装docker
+    local ret
     check_doc
     ret=$?
     if [[ ${ret} -eq 0 || ${ret} -eq 2 ]]   ; then
@@ -436,6 +444,8 @@ ins_conf(){
 
 _set_node_systemd(){
     # 指定网卡启动node
+    local INSERT_STR
+    local DON_SET_DISK
     if [[ -z "${SET_LINK}" ]]; then
         INSERT_STR=""
     else
@@ -1372,14 +1382,14 @@ zh_cn_help=(
 displayhelp(){
     echo -e "\033[2J"
     case $_LANG in
-        zh_CN.UTF-8|zh_cn )
-            for i in "${!zh_cn_help[@]}"; do
-                help_arr[$i]="${zh_cn_help[$i]}"
+        en_US.UTF-8|en_us )
+            for i in "${!en_us_help[@]}"; do
+                help_arr[$i]="${en_us_help[$i]}"
             done 
             ;;
         *           )
-            for i in "${!en_us_help[@]}"; do
-                help_arr[$i]="${en_us_help[$i]}"
+            for i in "${!zh_cn_us_help[@]}"; do
+                help_arr[$i]="${zh_cn_help[$i]}"
             done
             ;;
     esac
