@@ -122,22 +122,25 @@ run_as_root(){
         exit 2
     fi
 }
-env_check(){
-    # 检查环境
+_check_pg(){
     # Detection package manager
     if which apt >/dev/null 2>&1 ; then
-        echoinfo "Find apt\n"
+        # echoinfo "Find apt\n"
         PG="apt"
     elif which yum >/dev/null 2>&1 ; then
-        echoinfo "Find yum\n"
+        # echoinfo "Find yum\n"
         PG="yum"
     elif which pacman>/dev/null 2>&1 ; then
-        log "[info]" "Find pacman"
+        # log "[info]" "Find pacman"
         PG="pacman"
     else
         log "[error]" "\"apt\" or \"yum\" ,not found ,exit "
         exit 1
     fi
+}
+env_check(){
+    # 检查环境
+    _check_pg
     ret_c=$(which curl >/dev/null 2>&1;echo $?)
     ret_w=$(which wget >/dev/null 2>&1;echo $?)
     case ${PG} in
@@ -172,7 +175,7 @@ down(){
     # 根据设置的源下载文件,错误时切换源
     for link in "${mirror_pods[@]}"; do
         
-        if wget -t 2 --timeout=3  "${link}/$1" -O "$2" ; then
+        if wget -T 10 "${link}/$1" -O "$2" ; then
             break
         else
             continue
@@ -186,6 +189,8 @@ function version_ge() { test "$(echo "$@" | tr " " "\n" | sort -rV | head -n 1)"
 function version_le() { test "$(echo "$@" | tr " " "\n" | sort -V  | head -n 1)" == "$1"; }
 check_doc(){
     # 检查docker 安装状态和版本
+    local retd
+    local doc_v
     retd=$(which docker>/dev/null;echo $?)
     if [ "${retd}" -ne 0 ]; then
         log "[info]" "docker not found"
@@ -196,22 +201,24 @@ check_doc(){
         log "[info]" "dockerd version ${doc_v} above ${DOC_LOW} and below ${DOC_HIG}"
         return 0
     else
-        log "[info]" "docker version ${doc_v} fail"
+        log "[warn]" "docker installed. but docker version ${doc_v}  not testing"
         return 2
     fi
 }
 check_k8s(){
     # 检查k8s安装状态和版本
+    local reta
+    local retl
+    local k8s_adm
+    local k8s_let
     reta=$(which kubeadm>/dev/null 2>&1;echo $?)
     retl=$(which kubelet>/dev/null 2>&1;echo $?)
-    retc=$(which kubectl>/dev/null 2>&1;echo $?)
-    if [ "${reta}" -ne 0 ] || [ "${retl}" -ne 0 ] || [ "${retc}" -ne 0 ] ; then
+    if [ "${reta}" -ne 0 ] || [ "${retl}" -ne 0 ] ; then
         log "[info]" "k8s not found"
         return 1
     else 
         k8s_adm=$(kubeadm version -o short|grep -o '[0-9\.]*')
         k8s_let=$(kubelet --version|grep -o '[0-9\.]*')
-        k8s_ctl=$(kubectl  version --short --client|grep -o '[0-9\.]*')
         if version_ge "${k8s_adm}" "${K8S_LOW}" ; then
             log "[info]" "kubeadm version ok"
         else
@@ -224,17 +231,12 @@ check_k8s(){
             log "[info]"  "kubelet version fail"
             return 1
         fi
-        if version_ge "${k8s_ctl}" "${K8S_LOW}" ; then
-            log "[info]"  "kubectl version ok"
-        else
-            log "[info]"  "kubectl version fail"
-            return 1
-        fi
         return 0
     fi
 }
 check_info(){
     # 检测node.db文件是否有信息
+    local res
     if [ ! -s ${NODE_INFO} ]; then
         touch ${NODE_INFO}
     else
@@ -251,6 +253,7 @@ check_info(){
 }
 ins_docker(){
     # 安装docker
+    local ret
     check_doc
     ret=$?
     if [[ ${ret} -eq 0 || ${ret} -eq 2 ]]   ; then
@@ -261,7 +264,12 @@ ins_docker(){
     if [[ "$PG" == "apt" ]]; then
         # Install docker with APT
         # apt 安装docker
+        apt install gnupg2 -y
         curl -fsSL "https://download.docker.com/linux/$OS/gpg" | apt-key add -
+        if [[ $? -ne 0 ]]; then
+            echoerr "add source public key failed ,check you network\n添加docker源公钥失败,检查您的网络配置,必要时请将download.docker.com加入代理\n"
+            return 2
+        fi
         echo "deb https://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/$OS  $OS_CODENAME stable"  >/etc/apt/sources.list.d/docker.list
         apt update
         # 遍历版本号,安装不能超过限制的版本
@@ -317,7 +325,7 @@ ins_jq(){
     if which jq>/dev/null 2>&1; then
         return
     fi
-    env_check
+    _check_pg
     case $PG in
         apt     ) $PG install -y jq ;;
         yum     ) jq_yum_ins ;;
@@ -341,6 +349,12 @@ init(){
     env_check
     check_info
 }
+_lvm_ins(){
+    case $PG in
+        apt ) apt install -y lvm2;;
+        yum ) yum install -y lvm2;;
+    esac
+}
 _k8s_ins_yum(){
     cat <<EOF > /etc/yum.repos.d/kubernetes.repo
 [kubernetes]
@@ -352,8 +366,8 @@ repo_gpgcheck=1
 gpgkey=https://mirrors.aliyun.com/kubernetes/yum/doc/yum-key.gpg https://mirrors.aliyun.com/kubernetes/yum/doc/rpm-package-key.gpg
 EOF
     setenforce 0
-    yum install  -y kubelet-1.12.3 kubeadm-1.12.3 kubectl-1.12.3 kubernetes-cni-0.6.0
-    yum --exclude kubelet kubeadm kubectl kubernetes-cni
+    yum install  -y kubelet-1.12.3 kubeadm-1.12.3 kubernetes-cni-0.6.0
+    yum --exclude kubelet kubeadm kubernetes-cni
     systemctl enable kubelet && systemctl start kubelet
     
 }
@@ -362,16 +376,22 @@ _k8s_ins_apt(){
     echo "deb https://mirrors.aliyun.com/kubernetes/apt/ kubernetes-xenial main"|tee /etc/apt/sources.list.d/kubernetes.list
     log "[info]" "installing k8s"
     apt update
-    apt-mark unhold kubelet kubeadm kubectl kubernetes-cni
-    apt install -y --allow-downgrades kubeadm=1.12.3-00 kubectl=1.12.3-00 kubelet=1.12.3-00 kubernetes-cni=0.6.0-00 
-    apt-mark hold kubelet kubeadm kubectl kubernetes-cni
+    apt-mark unhold kubelet kubeadm kubernetes-cni
+    apt install -y --allow-downgrades kubeadm=1.12.3-00  kubelet=1.12.3-00 kubernetes-cni=0.6.0-00 
+    apt-mark hold kubelet kubeadm kubernetes-cni
 }
 pull_docker_image(){
     ins_docker
-    docker pull registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/pause:3.1
-    docker pull registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/kube-proxy:v1.12.3
-    docker tag registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/pause:3.1 k8s.gcr.io/pause:3.1
-    docker tag registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/kube-proxy:v1.12.3 k8s.gcr.io/kube-proxy:v1.12.3
+    case $VDIS in
+        arm   ) pause_TAG="arm32-3.1" ; proxy_name="kube-proxy-arm"     ;;
+        arm64 ) pause_TAG="arm-3.1"   ; proxy_name="kube-proxy-arm64"   ;;
+        amd64 ) pause_TAG="3.1"       ; proxy_name="kube-proxy"         ;;
+    esac
+    docker pull registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/pause:$pause_TAG
+    docker pull registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/$proxy_name:v1.12.3
+
+    docker tag registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/pause:$pause_TAG k8s.gcr.io/pause:3.1
+    docker tag registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/$proxy_name:v1.12.3 k8s.gcr.io/kube-proxy:v1.12.3
 }
 ins_k8s(){
     swapoff -a
@@ -379,13 +399,13 @@ ins_k8s(){
     if ! grep -q '^swapoff' /etc/rc.local  ; then
         sed -i "/exit/i\swapoff -a #bxc script" /etc/rc.local
     fi
+    systemctl stop armbian-zram-config.service&&systemctl disable armbian-zram-config.service
     if ! check_k8s ; then
         init
-        if [[ "$PG" == "apt" ]]; then
-            _k8s_ins_apt
-        elif [[ "$PG" == "yum" ]]; then
-            _k8s_ins_yum
-        fi
+        case $PG in
+            apt ) _k8s_ins_apt ;;
+            yum ) _k8s_ins_yum ;;
+        esac
         if ! check_k8s ; then
             log "[error]" "k8s install fail!"
             exit 1
@@ -393,6 +413,7 @@ ins_k8s(){
     else
         log "[info]" " k8s was found! skip"
     fi
+    _lvm_ins
     pull_docker_image
     cat <<EOF >  /etc/sysctl.d/k8s.conf
 vm.swappiness = 0
@@ -404,13 +425,16 @@ net.ipv4.tcp_congestion_control = bbr
 net.ipv4.ip_forward = 1
 EOF
     modprobe br_netfilter
-    echo "tcp_bbr">>/etc/modules
+    printf "\ntcp_bbr\n">>/etc/modules
     sysctl -p /etc/sysctl.d/k8s.conf 2>/dev/null
     log "[info]" "k8s install over"
 }
 k8s_remove(){
     kubeadm reset -f
-    ${PG} remove -y kubelet kubectl kubeadm --allow-change-held-packages
+    case $PG in
+        yum ) $PG remove -y kubeadm kubelet  ;;
+        apt ) $PG remove -y kubeadm kubelet --allow-change-held-packages ;;
+    esac
     rm -rf /etc/sysctl.d/k8s.conf
 }
 ins_conf(){
@@ -420,6 +444,8 @@ ins_conf(){
 
 _set_node_systemd(){
     # 指定网卡启动node
+    local INSERT_STR
+    local DON_SET_DISK
     if [[ -z "${SET_LINK}" ]]; then
         INSERT_STR=""
     else
@@ -508,20 +534,21 @@ node_remove(){
     # 清除上面安装的node组件
     systemctl stop bxc-node
     systemctl disable bxc-node
-    rm -rf /lib/systemd/system/bxc-node.service 
+    rm -rvf /lib/systemd/system/bxc-node.service
+    rm -rvf /opt/bcloud/nodeapi/node
 }
 bxc-network_ins(){
     # 安装网络插件,用与连接到bxc网络
     ret_4=$(apt list libcurl4 2>/dev/null|grep -q installed;echo $?)
     if [[ ${ret_4} -eq 0 ]]; then
         log "[info]" "Install libcurl4 library bxc-network"
-        down "img-modules/bxc-network_x86_64" "${BASE_DIR}/bxc-network"
+        down "img-modules/bxc-network_$ARCH" "${BASE_DIR}/bxc-network"
         chmod +x ${BASE_DIR}/bxc-network
     fi
     ret_3=$(apt list libcurl3 2>/dev/null|grep -q installed;echo $?)
     if [[ ${ret_3} -eq 0 ]]; then
         log "[info]" "Install libcurl3 library bxc-network"
-        down "img-modules/5.0.0-aml-N1-BonusCloud/bxc-network_x86_64" "${BASE_DIR}/bxc-network"
+        down "img-modules/5.0.0-aml-N1-BonusCloud/bxc-network_$ARCH" "${BASE_DIR}/bxc-network"
         chmod +x ${BASE_DIR}/bxc-network
     fi
     apt install -y liblzo2-2 libjson-c3 
@@ -651,11 +678,11 @@ teleport_ins(){
     esac
 }
 teleport_remove(){
-    rm -f /opt/bcloud/teleport
+    rm -vf /opt/bcloud/teleport
     systemctl disable teleport
     systemctl stop teleport
-    rm -f /lib/systemd/system/teleport.service
-    rm -f /etc/systemd/system/teleport.service
+    rm -vf /lib/systemd/system/teleport.service 2>&1 
+    rm -vf /etc/systemd/system/teleport.service 2>&1 
 }
 iostat_ins(){
     case $PG in
@@ -743,6 +770,20 @@ only_net_set_promisc(){
     if ! grep -q "${LINK} promisc" /etc/rc.local ; then
         sed -i "/exit/i\ip link set ${LINK} promisc on" /etc/rc.local
     fi
+    #add pppoe support
+    if [[ $_SET_PPPOE -eq 1 ]]; then
+        if grep -q 'ppp' /etc/modules-load.d/bxc-net.conf 2>/dev/null; then
+            return 0
+        fi
+        echo pppoe >> /etc/modules
+        printf "tun\nppp-compress-18\nppp_mppe\nppp_deflate\nppp_async\npppoatm\nppp_generic\n">/etc/modules-load.d/bxc-net.conf
+        echoinfo "We need reboot,after reboot you should run this command again\n"
+        echoinfo "需要重启,重启之后你需要再次运行此命令\n"
+        read -r -p "reboot now?(现在重启吗)[Y|n]" choose
+        case $choose in
+            y|Y ) reboot ;;
+        esac
+    fi
 }
 only_net_set_bridge(){
     # 设置macvlan桥接网络
@@ -775,6 +816,9 @@ only_net_set_bridge(){
     --gateway="${LINK_GW}" --aux-address="exclude_host=${LINK_HOSTIP}" \
     --ip-range="${SET_RANGE}" \
     -o parent="${LINK}" -o macvlan_mode="bridge" bxc1
+    if [[ $_SET_PPPOE -eq 1 ]]; then
+        return 0
+    fi
     # 检验网卡通不通
     if ! only_net_check_network ; then
         return 3
@@ -821,20 +865,33 @@ only_ins_network_docker_run(){
         local set_ipaddress
         local ipaddress
         echoinfo "Set ip address:\n" ;read -r ipaddress
-        set_ipaddress="--ip=\"${ipaddress}\""
+        set_ipaddress="--ip=${ipaddress}"
     else
         set_ipaddress=''
     fi
-    # 选择新旧网卡名
+    # 设置宽带拨号
+    if [[ $_SET_PPPOE -eq 1 ]] ;then
+        read -r -p "pppoe username:" -e -i "$pppoe_user"  pppoe_user
+        read -r -p "pppoe password:" -e -i "$pppoe_passwd" pppoe_passwd
+        if [[ -n $pppoe_user && -n $pppoe_passwd ]]; then
+            ppp_account="-e PPPOE_NAME=$pppoe_user -e PPPOE_PASSWD=$pppoe_passwd "
+        else
+            echoerr "set error\n"
+            return 1
+        fi
+    fi
+    if [[ $_NEED_PUBIP -eq 1 ]]; then
+        local need_pubip=" -e NEED_PUBIP=1"
+    fi
     local network_name
     if docker network ls -f name=bxc --format "{{.Name}}"|grep -q 'bxc1'; then
         network_name="--net=bxc1"
     else
         network_name="--net=bxc-macvlan"
     fi
-    command="docker run -d --cap-add=NET_ADMIN $network_name $set_ipaddress --mac-address=$mac_addr \
-        --sysctl net.ipv6.conf.all.disable_ipv6=0 --device /dev/net/tun --restart=always  \
-        -e bcode=${bcode} -e email=${email} --name=bxc-${bcode} \
+    command="docker run -d --restart=always  $network_name $set_ipaddress --mac-address=$mac_addr \
+        --sysctl net.ipv6.conf.all.disable_ipv6=0 --device /dev/net/tun --device /dev/ppp --cap-add=NET_ADMIN \
+        -e bcode=${bcode} -e email=${email} ${ppp_account} ${need_pubip} --name=bxc-${bcode} \
         -v bxc_data_${bcode}:/opt/bcloud \
         ${image_name}"
     # 运行命令
@@ -899,6 +956,8 @@ only_ins_network_docker_openwrt(){
     ins_jq
     local image_name=""
     local mac_head=""
+    local pppoe_user
+    local pppoe_passwd
     if ! _only_net_get_image ; then
         return 1
     fi
@@ -989,6 +1048,10 @@ only_net_cert_import_run(){
             continue
         fi
         bcode_=$(echo "$info"|jq -r '.bcode')
+        if docker inspect "bxc-$bcode_">/dev/null 2>&1; then
+            echoinfo "container $bcode_ already exists\n"
+            continue 
+        fi
         email_=$(echo "$info"|jq -r '.email')
         mac_addr_=$(echo "$info"|jq -r '.mac_address')
         only_ins_network_docker_run "$bcode_" "$email_" "$mac_addr_"
@@ -1007,6 +1070,10 @@ only_net_cert_import(){
 
         filename=$(basename "$i")
         bcode=$(echo "$i"|grep -E -o "[0-9a-f]{4}-[0-9a-f]{8}-([0-9a-f]{4}-){2}[0-9a-f]{4}-[0-9a-f]{12}")
+        if docker volume inspect "bxc_data_$bcode" >/dev/null 2>&1 ; then
+            echoinfo "certificate $bcode already exists \n"
+            continue
+        fi
         [[ -z $bcode ]]&& echoerr "can not get bcode for $i" && continue
         echoinfo "importing\t$bcode ...\n"
         docker create -v "bxc_data_$bcode":/opt/bcloud --name "bxc_date_tmp_$bcode" qinghon/bxc-net:$VDIS true 1>/dev/null 
@@ -1204,6 +1271,12 @@ mg(){
     #docker check
     doc_che_ret=$(check_doc2 >/dev/null 2>&1 ;echo $?)
     [[ ${doc_che_ret} -ne 1 ]]&& doc_v=$(docker version --format "{{.Server.Version}}")
+
+    #Disk find
+    lvm_have=$(lsblk -l |grep 'BonusVolGroup')
+    [[ -n $lvm_have ]]&& mounted=$(echo "$lvm_have"|awk '{print $7}')
+    [[ -n $mounted ]] && used=$(df -h |grep "$mounted"|awk '{print $}')
+
     #output
     echowarn "\nbxc-network:\n"
     echo -e -n "|install?\t|running?\t|connect?\t|proxy aleady?\n"
@@ -1245,9 +1318,8 @@ remove(){
             echoinfo "teleport removed\n"
             echoinfo "see you again!\n"
             ;;
-        * ) return ;;
+        * ) echowarn "Your input is incorrect \n"&& return ;;
     esac
-
 }
 
 en_us_help=(
@@ -1275,6 +1347,7 @@ en_us_help=(
     "    -D             Don't set disk for node program"
     "    -I Interface   set interface name to you want"
     "    -S             show Info level output"
+    "    -Z function    run the specified function"
     " "
     "When no parameters are added, the calculation task component is installed "
     "by default. If the parameter \"only install\" is added, the corresponding "
@@ -1302,20 +1375,21 @@ zh_cn_help=(
     "    -D             不初始化外挂硬盘"
     "    -I Interface   指定安装时使用的网卡"
     "    -S             显示Info等级日志"
+    "    -Z function    运行指定函数"
     " "
     "不加参数时,默认安装计算任务组件,如加了\"仅安装..\"等参数时将安装对应组件")
 
 displayhelp(){
     echo -e "\033[2J"
     case $_LANG in
-        zh_CN.UTF-8|zh_cn )
-            for i in "${!zh_cn_help[@]}"; do
-                help_arr[$i]="${zh_cn_help[$i]}"
+        en_US.UTF-8|en_us )
+            for i in "${!en_us_help[@]}"; do
+                help_arr[$i]="${en_us_help[$i]}"
             done 
             ;;
         *           )
-            for i in "${!en_us_help[@]}"; do
-                help_arr[$i]="${en_us_help[$i]}"
+            for i in "${!zh_cn_us_help[@]}"; do
+                help_arr[$i]="${zh_cn_help[$i]}"
             done
             ;;
     esac
@@ -1333,6 +1407,7 @@ install_all(){
     _NET_CONF=1
     _SYSSTAT=1
 }
+_check_pg
 
 DISPLAYINFO="0"
 _LANG="${LANG}"
@@ -1354,13 +1429,15 @@ _DON_SET_DISK=0
 _SET_IP_ADDRESS=0
 _SHOW_HELP=0
 _DON_DOWN_IMAGE=0
+_SET_PPPOE=0
+_NEED_PUBIP=0
 #_TEST=0
 
 if [[ $# == 0 ]]; then
     install_all
 fi
 
-while  getopts "bdiknrstceghAI:DSHL:M" opt ; do
+while  getopts "bdiknrstceghAI:DSHL:MPEZ:" opt ; do
     case $opt in
         i ) _INIT=1         ;;
         b ) _BOUND=1        ;;
@@ -1381,6 +1458,9 @@ while  getopts "bdiknrstceghAI:DSHL:M" opt ; do
         S ) DISPLAYINFO="1" ;;
         H ) _SET_IP_ADDRESS=1   ;;
         L ) _LANG="${OPTARG}"   ;;
+        P ) _SET_PPPOE=1    ;;
+        E ) _NEED_PUBIP=1   ;;
+        Z ) ${OPTARG} ;;
         ? ) echoerr "Unknow arg. exiting" ;displayhelp; exit 1 ;;
     esac
 done
