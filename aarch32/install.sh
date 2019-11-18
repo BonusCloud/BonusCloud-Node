@@ -1007,15 +1007,35 @@ only_ins_network_docker_openwrt(){
         only_ins_network_docker_run "${i}" "${email}"
     done
 }
+only_ins_network_vps(){
+    ins_docker
+    local bcode
+    local email
+    local image_name
+    if ! _only_net_get_image ; then
+        return 1
+    fi
+    if ! read_bcode_input ;then
+        echoerr "bcode input error(bcode输入错误)\n"
+        return 3
+    fi
+    docker network create bxc1
+    if ! only_net_set_bridge ; then
+        return 4
+    fi
+    only_ins_network_docker_run  "${bcode}" "$email"
+}
 only_ins_network_choose_plan(){
     echoinfo "choose plan:\n"
     echoinfo "\t1) run as base progress,only one(只运行基础进程,兼容性差,内存低,单开)\n"
     echoinfo "\t2) run openwrt as docker,more(运行在docker里,兼容性好,内存占用高,可多开)\n"
-    echoinfo "CHOOSE [1|2]:"
+    echoinfo "\t3) run as VPS, only one (VPS专用,只能起一个)\n"
+    echoinfo "CHOOSE [1|2|3]:"
     read -r  CHOOSE
     case $CHOOSE in
         1 ) only_ins_network_base;;
         2 ) only_ins_network_docker_openwrt ;;
+        3 ) only_ins_network_vps ;;
         * ) echowarn "\nno choose(未选择)\n";;
     esac
 }
