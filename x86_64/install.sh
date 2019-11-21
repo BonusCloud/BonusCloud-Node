@@ -41,8 +41,8 @@ support_os=(
     ubuntu
 )
 mirror_pods=(
-    "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master"
     "https://bonuscloud.coding.net/p/BonusCloud-Node/d/BonusCloud-Node/git/raw/master"
+    "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master"
     "https://bonuscloud-node.s3.cn-north-1.jdcloud-oss.com"
 )
 
