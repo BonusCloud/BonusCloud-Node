@@ -41,9 +41,9 @@ support_os=(
     ubuntu
 )
 mirror_pods_node=(
+    "https://bonuscloud.coding.net/p/BonusCloud-Node/d/BonusCloud-Node/git/raw/master/img-modules"
     "https://bxc-node.s3.cn-east-2.jdcloud-oss.com"
     "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules"
-    "https://bonuscloud.coding.net/p/BonusCloud-Node/d/BonusCloud-Node/git/raw/master/img-modules"
 )
 mirror_pods_git=(
     "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master"
