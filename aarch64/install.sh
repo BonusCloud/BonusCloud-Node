@@ -40,12 +40,15 @@ support_os=(
     raspbian
     ubuntu
 )
-mirror_pods=(
+mirror_pods_node=(
+    "https://bxc-node.s3.cn-east-2.jdcloud-oss.com"
+    "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules"
+    "https://bonuscloud.coding.net/p/BonusCloud-Node/d/BonusCloud-Node/git/raw/master/img-modules"
+)
+mirror_pods_git=(
     "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master"
     "https://bonuscloud.coding.net/p/BonusCloud-Node/d/BonusCloud-Node/git/raw/master"
-    "https://bonuscloud-node.s3.cn-north-1.jdcloud-oss.com"
 )
-
 
 echoerr(){ printf "\033[1;31m$1\033[0m" 
 }
@@ -104,10 +107,35 @@ sysArch(){
     fi
     return 0
 }
-sys_codename(){
+sys_osname(){
     if  which lsb_release >/dev/null  2>&1; then
+        OS=$(lsb_release -is)
         OS_CODENAME=$(lsb_release -cs)
+        return 
     fi
+    source /etc/os-release
+    case $ID in
+        ubuntu )
+            OS="ubuntu" 
+            OS_CODENAME=$UBUNTU_CODENAME
+            ;;
+        debian ) 
+            OS="debian"
+            if [[ $VERSION_CODENAME != "" ]]; then
+                OS_CODENAME=$VERSION_CODENAME
+            else
+                OS_CODENAME=$(echo "$VERSION"|sed -e 's/(//g' -e 's/)//g'|awk '{print $2}')
+            fi
+            ;;
+        raspbian )
+            OS="raspbian"
+            OS_CODENAME=$(echo "$VERSION"|sed -e 's/(//g' -e 's/)//g'|awk '{print $2}')
+            ;;
+        centos )
+            OS="centos"
+            ;;
+
+    esac
 }
 run_as_root(){
     # 检测是否有root权限
@@ -148,22 +176,7 @@ env_check(){
         yum ) $PG install -y curl wget ;;
     esac
     # Check if the system supports
-    # 使用screenfetch工具检测系统发行版
-    [[ ! -s $TMP/screenfetch ]]&&down "screenfetch-dev" "$TMP/screenfetch"
-    chmod +x $TMP/screenfetch
-    OS_line=$($TMP/screenfetch -n |grep 'OS:')
-    OS=$(echo "$OS_line"|awk '{print $3}'|tr '[:upper:]' '[:lower:]')
-    if [[ -z "$OS" ]]; then
-        source /etc/os-release
-        if echo "${support_os[@]}"|grep -w "$ID" &>/dev/null  ; then
-            OS="$ID"
-            case $ID in
-                ubuntu ) OS_CODENAME="$VERSION_CODENAME" ;;
-            esac
-        else
-            read -r -p "The release version is not detected, please enter it manually,like \"ubuntu\"" OS
-        fi
-    fi
+    sys_osname
     if ! echo "${support_os[@]}"|grep -w "$OS" &>/dev/null ; then
         log "[error]" "This system is not supported by docker, exit"
         exit 1
@@ -173,9 +186,28 @@ env_check(){
 }
 down(){
     # 根据设置的源下载文件,错误时切换源
-    for link in "${mirror_pods[@]}"; do
-        
-        if wget -T 10 "${link}/$1" -O "$2" ; then
+    local LINK=$1
+    if [[ ${LINK:0:1} == "/" ]]; then
+        LINK=${LINK:1}
+    fi
+    for link in "${mirror_pods_node[@]}"; do
+        if wget -T 10 "${link}/$LINK" -O "$2" ; then
+            break
+        else
+            continue
+        fi
+        log "[error]" "Download ${link}/$1 failed"
+    done
+    return 1
+}
+down_git(){
+    # 根据设置的源下载文件,错误时切换源
+    local LINK=$1
+    if [[ ${LINK:0:1} == "/" ]]; then
+        LINK=${LINK:1}
+    fi
+    for link in "${mirror_pods_git[@]}"; do
+        if wget -T 10 "${link}/$LINK" -O "$2" ; then
             break
         else
             continue
@@ -200,9 +232,11 @@ check_doc(){
     if version_ge "${doc_v}" "${DOC_LOW}" && version_le "${doc_v}" "${DOC_HIG}" ; then
         log "[info]" "dockerd version ${doc_v} above ${DOC_LOW} and below ${DOC_HIG}"
         return 0
-    else
+    elif version_ge "${doc_v}" "${DOC_HIG}" ;then 
         log "[warn]" "docker installed. but docker version ${doc_v}  not testing"
         return 2
+    else
+        return 3
     fi
 }
 check_k8s(){
@@ -301,7 +335,7 @@ ins_docker(){
         log "[error]" "package manager ${PG} not support "
         return 1
     fi
-    usermod -aG docker $USER
+    usermod -aG docker ${USER}
     systemctl enable docker.service
     systemctl start docker.service
     check_doc
@@ -356,7 +390,7 @@ _lvm_ins(){
     esac
 }
 _k8s_ins_yum(){
-    cat <<EOF > /etc/yum.repos.d/kubernetes.repo
+    printf "
 [kubernetes]
 name=Kubernetes
 baseurl=https://mirrors.aliyun.com/kubernetes/yum/repos/kubernetes-el7-$(uname -m)/
@@ -364,7 +398,7 @@ enabled=1
 gpgcheck=1
 repo_gpgcheck=1
 gpgkey=https://mirrors.aliyun.com/kubernetes/yum/doc/yum-key.gpg https://mirrors.aliyun.com/kubernetes/yum/doc/rpm-package-key.gpg
-EOF
+"> /etc/yum.repos.d/kubernetes.repo
     setenforce 0
     yum install  -y kubelet-1.12.3 kubeadm-1.12.3 kubernetes-cni-0.6.0
     yum --exclude kubelet kubeadm kubernetes-cni
@@ -415,15 +449,13 @@ ins_k8s(){
     fi
     _lvm_ins
     pull_docker_image
-    cat <<EOF >  /etc/sysctl.d/k8s.conf
-vm.swappiness = 0
-net.ipv6.conf.default.forwarding = 1
-net.bridge.bridge-nf-call-iptables = 1
-net.bridge.bridge-nf-call-ip6tables = 1
-net.ipv6.conf.tun0.mtu = 1280
-net.ipv4.tcp_congestion_control = bbr
-net.ipv4.ip_forward = 1
-EOF
+    printf "vm.swappiness = 0
+    net.ipv6.conf.default.forwarding = 1
+    net.bridge.bridge-nf-call-iptables = 1
+    net.bridge.bridge-nf-call-ip6tables = 1
+    net.ipv6.conf.tun0.mtu = 1280
+    net.ipv4.tcp_congestion_control = bbr
+    net.ipv4.ip_forward = 1 ">/etc/sysctl.d/k8s.conf
     modprobe br_netfilter
     printf "\ntcp_bbr\n">>/etc/modules
     sysctl -p /etc/sysctl.d/k8s.conf 2>/dev/null
@@ -438,8 +470,19 @@ k8s_remove(){
     rm -rf /etc/sysctl.d/k8s.conf
 }
 ins_conf(){
-    down "x86_64/res/compute/10-mynet.conflist" "$BASE_DIR/compute/10-mynet.conflist"
-    down "x86_64/res/compute/99-loopback.conf" "$BASE_DIR/compute/99-loopback.conf"
+    printf '{"name": "mynet",
+      "cniVersion": "0.3.0",
+      "plugins": [
+        {"type": "bridge",
+          "bridge": "cni0",
+          "ipMasq": true,
+          "isGateway": true,
+          "ipam": {"type": "host-local","subnet": "10.244.1.0/24","routes": [{"dst": "0.0.0.0/0"}]}
+        },
+        {"type": "portmap","capabilities": {"portMappings": true}}
+      ]}' > "$BASE_DIR/compute/10-mynet.conflist"
+
+    printf '{"cniVersion": "0.3.0","type": "loopback"}' > "$BASE_DIR/compute/99-loopback.conf"
 }
 
 _set_node_systemd(){
@@ -474,14 +517,14 @@ node_ins(){
     # 安装node组件
     # 区分kernel版本下载文件
     kel_v=$(uname -r|grep -E -o '([0-9]+\.){2}[0-9]')
-    Rlink="img-modules"
+
     if  version_ge "$kel_v" "5.0.0" ; then
-        Rlink="$Rlink/5.0.0-aml-N1-BonusCloud"
+        Rlink="5.0.0-aml-N1-BonusCloud"
     fi
     # 下载文件列表
-    [[ ! -f $TMP/info.txt ]]&&down "$Rlink/info.txt" "$TMP/info.txt"
+    [[ ! -f $TMP/info.txt ]]&&down "info.txt" "$TMP/info.txt"
     if [ ! -s "$TMP/info.txt" ]; then
-        log "[error]" "wget \"$Rlink/info.txt\" -O $TMP/info.txt"
+        log "[error]" "wget \"info.txt\" -O $TMP/info.txt"
         return 1
     fi
     # 遍历文件列表下载文件
@@ -542,13 +585,13 @@ bxc-network_ins(){
     ret_4=$(apt list libcurl4 2>/dev/null|grep -q installed;echo $?)
     if [[ ${ret_4} -eq 0 ]]; then
         log "[info]" "Install libcurl4 library bxc-network"
-        down "img-modules/bxc-network_$ARCH" "${BASE_DIR}/bxc-network"
+        down "bxc-network_$ARCH" "${BASE_DIR}/bxc-network"
         chmod +x ${BASE_DIR}/bxc-network
     fi
     ret_3=$(apt list libcurl3 2>/dev/null|grep -q installed;echo $?)
     if [[ ${ret_3} -eq 0 ]]; then
         log "[info]" "Install libcurl3 library bxc-network"
-        down "img-modules/5.0.0-aml-N1-BonusCloud/bxc-network_$ARCH" "${BASE_DIR}/bxc-network"
+        down "5.0.0-aml-N1-BonusCloud/bxc-network_$ARCH" "${BASE_DIR}/bxc-network"
         chmod +x ${BASE_DIR}/bxc-network
     fi
     apt install -y liblzo2-2 libjson-c3 
@@ -1124,18 +1167,18 @@ ins_kernel(){
         echo "this device not Phicomm N1 exit"
         return 1
     fi
-    down "/aarch64/res/N1_kernel/md5sum" "$TMP/md5sum"
-    down "/aarch64/res/N1_kernel/System.map-5.0.0-aml-N1-BonusCloud-1-1.xz" "$TMP/System.map-5.0.0-aml-N1-BonusCloud-1-1.xz"
-    down "/aarch64/res/N1_kernel/vmlinuz-5.0.0-aml-N1-BonusCloud-1-1.xz" "$TMP/vmlinuz-5.0.0-aml-N1-BonusCloud-1-1.xz"
-    down "/aarch64/res/N1_kernel/modules.tar.xz" "$TMP/modules.tar.xz"
-    down "/aarch64/res/N1_kernel/N1.dtb" "$TMP/N1.dtb"
+    down_git "/aarch64/res/N1_kernel/md5sum" "$TMP/md5sum"
+    down_git "/aarch64/res/N1_kernel/System.map-5.0.0-aml-N1-BonusCloud-1-1.xz" "$TMP/System.map-5.0.0-aml-N1-BonusCloud-1-1.xz"
+    down_git "/aarch64/res/N1_kernel/vmlinuz-5.0.0-aml-N1-BonusCloud-1-1.xz" "$TMP/vmlinuz-5.0.0-aml-N1-BonusCloud-1-1.xz"
+    down_git "/aarch64/res/N1_kernel/modules.tar.xz" "$TMP/modules.tar.xz"
+    down_git "/aarch64/res/N1_kernel/N1.dtb" "$TMP/N1.dtb"
     echo "verifty file md5..."
     while read line; do
         file_name=$(echo "${line}" |awk '{print $2}')
         git_md5=$(echo "${line}" |awk '{print $1}')
         local_md5=$(md5sum "$TMP/$file_name"|awk '{print $1}')
         if [[ "$git_md5" != "$local_md5" ]]; then
-            down "/aarch64/res/N1_kernel/$file_name" "$TMP/$file_name"
+            down_git "/aarch64/res/N1_kernel/$file_name" "$TMP/$file_name"
             local_md5=$(md5sum "$TMP/$file_name"|awk '{print $1}')
             if [[ "$git_md5" != "$local_md5" ]]; then
                 echo "download $TMP/$file_name failed,md5 check fail"
@@ -1342,64 +1385,64 @@ remove(){
     esac
 }
 
-en_us_help=(
-    "bash $0 [option]    "
-    "    -h             Print this and exit"
-    "     └── -L        Specify help language,like \"-h -L zh_cn\""
-    "    -b             bound for command"
-    "    -d             Only install docker"
-    "    -c             change kernel to compiled dedicated kernels,only \"Phicomm N1\"" 
-    "                   and is danger!"
-    "    -i             Installation environment check and initialization"
-    "    -k             Install the k8s environment and the k8s components that" 
-    "                   BonusCloud depends on"
-    "    -n             Only install node management components "
-    "    -r             Fully remove bonuscloud plug-ins and components"
-    "    -s             Install teleport for remote debugging by developers"
-    "    -t             Show all plugin running status"
-    "    -e             Set interfaces name to ethx,only x86_64 and using grub"
-    "    -g             Install network job only"
-    "     └── -H        Set ip for container"
-    "     └── -M        skip bxc-net docker image download"
-    "     └── -e        export only network job certificate"
-    "     └── -i        import only network job certificate"
-    "    -A             Install all task component"
-    "    -D             Don't set disk for node program"
-    "    -I Interface   set interface name to you want"
-    "    -S             show Info level output"
-    "    -Z function    run the specified function"
-    " "
-    "When no parameters are added, the calculation task component is installed "
-    "by default. If the parameter \"only install\" is added, the corresponding "
-    "component will be installed.")
-zh_cn_help=(
-    "bash $0 [选项]    "
-    "    -h             打印此帮助并退出"
-    "     └── -L        指定帮助语言,如\"-h -L zh_cn\" "
-    "    -b             命令行绑定"
-    "    -d             仅安装Docker程序"
-    "    -c             安装定制内核,仅支持\"Phicomm N1\""
-    "    -i             仅初始化"
-    "    -k             仅安装k8s组件"
-    "    -n             安装node组件"
-    "    -r             清除所有安装的相关程序"
-    "    -s             仅安装teleport远程调试程序,默认安装"
-    "    -t             显示各组件运行状态"
-    "    -e             设置网卡名称为ethx格式,仅支持使用grub的x86设备"
-    "    -g             仅安装网络任务"
-    "     └── -H        网络容器指定IP"
-    "     └── -M        跳过bxc-net镜像下载"
-    "     └── -e        导出单网络任务证书"
-    "     └── -i        导入单网络任务证书"
-    "    -A             安装所有计算任务组件"
-    "    -D             不初始化外挂硬盘"
-    "    -I Interface   指定安装时使用的网卡"
-    "    -S             显示Info等级日志"
-    "    -Z function    运行指定函数"
-    " "
-    "不加参数时,默认安装计算任务组件,如加了\"仅安装..\"等参数时将安装对应组件")
 
 displayhelp(){
+    en_us_help=(
+        "bash $0 [option]    "
+        "    -h             Print this and exit"
+        "     └── -L        Specify help language,like \"-h -L zh_cn\""
+        "    -b             bound for command"
+        "    -d             Only install docker"
+        "    -c             change kernel to compiled dedicated kernels,only \"Phicomm N1\"" 
+        "                   and is danger!"
+        "    -i             Installation environment check and initialization"
+        "    -k             Install the k8s environment and the k8s components that" 
+        "                   BonusCloud depends on"
+        "    -n             Only install node management components "
+        "    -r             Fully remove bonuscloud plug-ins and components"
+        "    -s             Install teleport for remote debugging by developers"
+        "    -t             Show all plugin running status"
+        "    -e             Set interfaces name to ethx,only x86_64 and using grub"
+        "    -g             Install network job only"
+        "     └── -H        Set ip for container"
+        "     └── -M        skip bxc-net docker image download"
+        "     └── -e        export only network job certificate"
+        "     └── -i        import only network job certificate"
+        "    -A             Install all task component"
+        "    -D             Don't set disk for node program"
+        "    -I Interface   set interface name to you want"
+        "    -S             show Info level output"
+        "    -Z function    run the specified function"
+        " "
+        "When no parameters are added, the calculation task component is installed "
+        "by default. If the parameter \"only install\" is added, the corresponding "
+        "component will be installed.")
+    zh_cn_help=(
+        "bash $0 [选项]    "
+        "    -h             打印此帮助并退出"
+        "     └── -L        指定帮助语言,如\"-h -L zh_cn\" "
+        "    -b             命令行绑定"
+        "    -d             仅安装Docker程序"
+        "    -c             安装定制内核,仅支持\"Phicomm N1\""
+        "    -i             仅初始化"
+        "    -k             仅安装k8s组件"
+        "    -n             安装node组件"
+        "    -r             清除所有安装的相关程序"
+        "    -s             仅安装teleport远程调试程序,默认安装"
+        "    -t             显示各组件运行状态"
+        "    -e             设置网卡名称为ethx格式,仅支持使用grub的x86设备"
+        "    -g             仅安装网络任务"
+        "     └── -H        网络容器指定IP"
+        "     └── -M        跳过bxc-net镜像下载"
+        "     └── -e        导出单网络任务证书"
+        "     └── -i        导入单网络任务证书"
+        "    -A             安装所有计算任务组件"
+        "    -D             不初始化外挂硬盘"
+        "    -I Interface   指定安装时使用的网卡"
+        "    -S             显示Info等级日志"
+        "    -Z function    运行指定函数"
+        " "
+        "不加参数时,默认安装计算任务组件,如加了\"仅安装..\"等参数时将安装对应组件")
     echo -e "\033[2J"
     case $_LANG in
         en_US.UTF-8|en_us )
@@ -1407,8 +1450,8 @@ displayhelp(){
                 help_arr[$i]="${en_us_help[$i]}"
             done 
             ;;
-        *           )
-            for i in "${!zh_cn_us_help[@]}"; do
+        *  )
+            for i in "${!zh_cn_help[@]}"; do
                 help_arr[$i]="${zh_cn_help[$i]}"
             done
             ;;
@@ -1485,7 +1528,7 @@ while  getopts "bdiknrstceghAI:DSHL:MPEZ:" opt ; do
     esac
 done
 [[ $_SHOW_HELP -eq 1 ]]     &&displayhelp
-[[ $_SYSARCH -eq 1 ]]       &&sysArch   &&sys_codename  &&run_as_root "$*"
+[[ $_SYSARCH -eq 1 ]]       &&sysArch   &&sys_osname  &&run_as_root "$*"
 [[ $_SHOW_STATUS -eq 1 && $_ONLY_NET -eq 1 ]] &&_ONLY_NET=0&& _SHOW_STATUS=0&&only_net_show
 [[ $_ONLY_NET -eq 1 && $_SET_ETHX -eq 1 ]]  &&_ONLY_NET=0 && _SET_ETHX=0&&only_net_cert_export
 [[ $_ONLY_NET -eq 1 && $_INIT -eq 1 ]]      &&_ONLY_NET=0 && _INIT=0 &&only_net_cert_import
