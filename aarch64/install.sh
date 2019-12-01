@@ -109,8 +109,8 @@ sysArch(){
 }
 sys_osname(){
     if  which lsb_release >/dev/null  2>&1; then
-        OS=$(lsb_release -is)
-        OS_CODENAME=$(lsb_release -cs)
+        OS=$(lsb_release -is|tr '[A-Z]' '[a-z]')
+        OS_CODENAME=$(lsb_release -cs|tr '[A-Z]' '[a-z]')
         return 
     fi
     source /etc/os-release
@@ -168,13 +168,8 @@ _check_pg(){
 }
 env_check(){
     # 检查环境
-    _check_pg
-    ret_c=$(which curl >/dev/null 2>&1;echo $?)
-    ret_w=$(which wget >/dev/null 2>&1;echo $?)
-    case ${PG} in
-        apt ) $PG install -y curl wget apt-transport-https pciutils;;
-        yum ) $PG install -y curl wget ;;
-    esac
+    # ret_c=$(which curl >/dev/null 2>&1;echo $?)
+    # ret_w=$(which wget >/dev/null 2>&1;echo $?)
     # Check if the system supports
     sys_osname
     if ! echo "${support_os[@]}"|grep -w "$OS" &>/dev/null ; then
@@ -183,6 +178,11 @@ env_check(){
     else
         log "[info]" "system : $OS ;Package manager $PG"
     fi
+    _check_pg
+    case ${PG} in
+        apt ) $PG install -y curl wget apt-transport-https pciutils;;
+        yum ) $PG install -y curl wget ;;
+    esac
 }
 down(){
     # 根据设置的源下载文件,错误时切换源
