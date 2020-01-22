@@ -1434,11 +1434,22 @@ mg(){
     #docker check
     doc_che_ret=$(check_doc2 >/dev/null 2>&1 ;echo $?)
     [[ ${doc_che_ret} -ne 1 ]]&& doc_v=$(docker version --format "{{.Server.Version}}")
+    [[ ${doc_che_ret} -ne 1 ]]&& doc_ps_num=$(docker ps |wc -l)
 
-    #Disk find
-    lvm_have=$(lsblk -l |grep 'BonusVolGroup')
-    [[ -n $lvm_have ]]&& mounted=$(echo "$lvm_have"|awk '{print $7}')
-    [[ -n $mounted ]] && used=$(df -h |grep "$mounted"|awk '{print $}')
+    #任务显示
+    lvm_have=$(lvs |grep -q 'BonusVolGroup';echo $?)
+    lvm_num=$(lvs |grep -c 'BonusVolGroup')
+    declare -A dict
+    # 任务类型字典
+    dict=([iqiyi]="A" [baijing]="B")
+
+    local type TYPE lvm_size lvm_free
+    type=$(lvs|grep BonusVolGroup|awk '{print $1}'|head -n 1|sed -r 's#bonusvol([A-Za-z]+)[0-9]+#\1#g')
+    TYPE=${dict[$type]}
+    lvm_size=$(lvs|grep BonusVolGroup|awk '{print $4}'|head -n 1|sed 's/\.00g//g')
+    lvm_free=$(df -h|grep $type|awk '{print $5}'|sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/ /g' -e 's/%/%%/g')
+    # [[ -n $lvm_have ]]&& mounted=$(echo "$lvm_have"|awk '{print $7}')
+    # [[ -n $mounted ]] && used=$(df -h |grep "$mounted"|awk '{print $}')
 
     #output
     echowarn "\nbxc-network:\n"
@@ -1458,7 +1469,13 @@ mg(){
     [[ -n $k8s_version ]] &&echoinfo "${k8s_version}\t"
     echowarn "\ndocker:\n"
     [[ ${doc_che_ret} -eq 1  ]] && { echoins "1";}||echoins "0"
-    [[ -n ${doc_v} ]] &&echoinfo "$doc_v\t"
+    [[ -n ${doc_v} ]] &&echoinfo "$doc_v\t\t"
+    [[ ${doc_che_ret} -eq 1  ]] || echoinfo "${doc_ps_num}"
+
+    echowarn "\nProgres:\n"
+    [[ ${lvm_have} -eq 0  ]] && { echorun "0";}|| echorun "1"
+    [[ ${lvm_have} -eq 0  ]] && echoinfo "${TYPE}-${lvm_num}-${lvm_size}\t\t"
+    [[ ${lvm_have} -eq 0  ]] && echoinfo "${lvm_free}"
     echoinfo "\n"
 }
 verifty(){
