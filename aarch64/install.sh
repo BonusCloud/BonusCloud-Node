@@ -82,6 +82,11 @@ log(){
             ;;
     esac
 }
+run_command(){
+    #log '[info]' "$1"
+    $1
+    return $?
+}
 sysArch(){
     ARCH=$(uname -m)
     if   [[ "$ARCH" == "i686" ]] || [[ "$ARCH" == "i386" ]]; then
@@ -928,6 +933,9 @@ only_net_set_promisc(){
         esac
     fi
 }
+only_ins_network_del_net(){
+    docker network rm bxc1 && { echoinfo "Delete success\n" ;} || echoerr "Delete error\n"
+}
 only_net_set_bridge(){
     # 设置macvlan桥接网络
     bxc_network_bridge_id=$(docker network ls -f name=bxc --format "{{.ID}}:{{.Name}}"|grep -E 'bxc-macvlan|bxc1'|awk -F: '{print $1}')
@@ -951,14 +959,21 @@ only_net_set_bridge(){
     LINK_HOSTIP=$(echo "${LINK_SUBNET}"|awk -F/ '{print $1}')
     only_net_set_promisc "$LINK"
     echoinfo "Set ip range(设置IP范围):\n";read -r -e -i "${LINK_SUBNET}" SET_RANGE
-    echo "docker network create -d macvlan --subnet=\"${LINK_SUBNET}\" \
-    --gateway=\"${LINK_GW}\" --aux-address=\"exclude_host=${LINK_HOSTIP}\" \
+    local NET_CMD
+    local AUX
+    AUX=--aux-address=$(hostname)=${LINK_HOSTIP}
+
+    NET_CMD="docker network create -d macvlan --subnet=\"${LINK_SUBNET}\" \
+    --gateway=\"${LINK_GW}\" ${AUX} \
     --ip-range=\"${SET_RANGE}\" \
-    -o parent=\"${LINK}\" -o macvlan_mode=\"bridge\" bxc1"
-    docker network create -d macvlan --subnet="${LINK_SUBNET}" \
-    --gateway="${LINK_GW}" --aux-address="exclude_host=${LINK_HOSTIP}" \
-    --ip-range="${SET_RANGE}" \
-    -o parent="${LINK}" -o macvlan_mode="bridge" bxc1
+    -o parent=${LINK} -o macvlan_mode=bridge bxc1"
+    echo "$NET_CMD"
+    #创建macvlan 网络
+    run_command "${NET_CMD}"
+    echoinfo "Config sure? [Y/n]:\n";read -r -e -i "Y" SURE_NET
+    case "$SURE_NET" in
+        N|n ) only_ins_network_del_net ;return 4 ;;
+    esac
     if [[ $_SET_PPPOE -eq 1 ]]; then
         return 0
     fi
@@ -983,11 +998,6 @@ generate_mac_addr(){
         mac_addr=$(od /dev/urandom -w6 -tx1 -An|sed -e 's/ //' -e 's/ /:/g'|head -n 1)
         echoinfo "Generate a mac address: $mac_addr\n"
     fi
-}
-run_command(){
-    #log '[info]' "$1"
-    $1
-    return $?
 }
 
 only_ins_network_docker_run(){
@@ -1171,14 +1181,16 @@ only_ins_network_vps(){
 only_ins_network_choose_plan(){
     echoinfo "choose plan:\n"
     echoinfo "\t1) run as base progress,only one(只运行基础进程,兼容性差,内存低,单开)\n"
-    echoinfo "\t2) run openwrt as docker,more(运行在docker里,兼容性好,内存占用高,可多开)\n"
+    echoinfo "\t2) run openwrt as docker, many (运行在docker里,兼容性好,内存占用高,可多开)\n"
     echoinfo "\t3) run as VPS, only one (VPS专用,只能起一个)\n"
-    echoinfo "CHOOSE [1|2|3]:"
+    echoinfo "\t4) Delete the created network (删除创建的网络)\n"
+    echoinfo "CHOOSE [1|2|3|4]:"
     read -r  CHOOSE
     case $CHOOSE in
         1 ) only_ins_network_base;;
         2 ) only_ins_network_docker_openwrt ;;
         3 ) only_ins_network_vps ;;
+        4 ) only_ins_network_del_net ;;
         * ) echowarn "\nno choose(未选择)\n";;
     esac
 }
