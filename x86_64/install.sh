@@ -39,6 +39,8 @@ support_os=(
     fedora
     raspbian
     ubuntu
+    manjarolinux
+    manjaro
 )
 mirror_pods_node=(
     "https://bonuscloud.coding.net/p/BonusCloud-Node/d/BonusCloud-Node/git/raw/master/img-modules"
@@ -79,6 +81,11 @@ log(){
             echowarn "${timeOut} $1 $2\n"
             ;;
     esac
+}
+run_command(){
+    #log '[info]' "$1"
+    $1
+    return $?
 }
 sysArch(){
     ARCH=$(uname -m)
@@ -131,9 +138,8 @@ sys_osname(){
             OS="raspbian"
             OS_CODENAME=$(echo "$VERSION"|sed -e 's/(//g' -e 's/)//g'|awk '{print $2}')
             ;;
-        centos )
-            OS="centos"
-            ;;
+        centos ) OS="centos" ;;
+        *       ) OS="$ID"
 
     esac
 }
@@ -172,6 +178,7 @@ env_check(){
     # ret_w=$(which wget >/dev/null 2>&1;echo $?)
     # Check if the system supports
     sys_osname
+    echo "$OS"
     if ! echo "${support_os[@]}"|grep -w "$OS" &>/dev/null ; then
         log "[error]" "This system is not supported by docker, exit"
         exit 1
@@ -182,6 +189,7 @@ env_check(){
     case ${PG} in
         apt ) $PG install -y curl wget apt-transport-https pciutils;;
         yum ) $PG install -y curl wget ;;
+        pacman ) $PG --needed --noconfirm -S curl wget 
     esac
 }
 down(){
@@ -285,6 +293,96 @@ check_info(){
         
     fi
 }
+_docker_apt(){
+    # Install docker with APT
+    # apt 安装docker
+    apt install gnupg2 -y
+    curl -fsSL "https://download.docker.com/linux/$OS/gpg" | apt-key add -
+    if [[ $? -ne 0 ]]; then
+        echoerr "add source public key failed ,check you network\n添加docker源公钥失败,检查您的网络配置,必要时请将download.docker.com加入代理\n"
+        return 2
+    fi
+    echo "deb https://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/$OS  $OS_CODENAME stable"  >/etc/apt/sources.list.d/docker.list
+    apt update
+    # 遍历版本号,安装不能超过限制的版本
+    for line in $(apt-cache madison docker-ce|awk '{print $3}') ; do
+        if version_le "$(echo "$line" |grep -E -o '([0-9]+\.){2}[0-9]+')" "$DOC_HIG" ; then
+            apt-mark unhold docker-ce
+            apt install -y --allow-downgrades docker-ce="$line" 
+            break
+        fi
+    done
+    apt-mark hold docker-ce 
+}   
+_docker_yum(){
+    yum install -y yum-utils
+    yum-config-manager --add-repo  https://mirrors.aliyun.com/docker-ce/linux/centos/docker-ce.repo
+    yum makecache
+    for line in $(yum list docker-ce --showduplicates|grep 'docker-ce'|awk '{print $2}'|sort -r) ; do
+        if version_le "$(echo "$line" |grep -E -o '([0-9]+\.){2}[0-9]+')" "$DOC_HIG" ; then
+            yum remove  -y docer-ce docker-ce-cli
+            if echo "$line"|grep -q ':' ; then
+                line=$(echo "$line"|awk -F: '{print $2}')
+            fi
+            yum install -y docker-ce-"$line" 
+            break
+        fi
+    done
+}
+_docker_static(){
+    curl https://raw.githubusercontent.com/docker/docker/master/contrib/check-config.sh > ${TMP}/check-config.sh
+    if bash ${TMP}/check-config.sh ;then
+        log "[error]" "You linux kernel not support runing docker;exit "
+        return 1
+    fi
+
+    wget -O ${TMP}/docker-18.06.3-ce.tgz "https://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/static/stable/${ARCH}/docker-18.06.3-ce.tgz"
+    tar -xvf ${TMP}/docker-18.06.3-ce.tgz
+    cp ${TMP}/docker/* /usr/bin/
+    groupadd docker --gid 999 --system
+    printf "[Unit]
+        Description=Docker Socket for the API
+        PartOf=docker.service
+        
+        [Socket]
+        ListenStream=/var/run/docker.sock
+        SocketMode=0660
+        SocketUser=root
+        SocketGroup=docker
+        
+        [Install]
+        WantedBy=sockets.target 
+    "|sed 's/    //g' >/lib/systemd/system/docker.socket
+    printf "[Unit]
+        Description=Docker Application Container Engine
+        Documentation=https://docs.docker.com
+        BindsTo=containerd.service
+        After=network-online.target firewalld.service containerd.service
+        Wants=network-online.target
+        Requires=docker.socket
+    
+        [Service]
+        Type=notify
+        ExecStart=/usr/bin/dockerd -H fd://
+        ExecReload=/bin/kill -s HUP \$MAINPID
+        TimeoutSec=0
+        RestartSec=2
+        Restart=always
+        StartLimitBurst=3
+        StartLimitInterval=60s
+        LimitNOFILE=infinity
+        LimitNPROC=infinity
+        LimitCORE=infinity
+        TasksMax=infinity
+        Delegate=yes
+        KillMode=process
+    
+        [Install]
+        WantedBy=multi-user.target
+    "|sed 's/    //g' >/lib/systemd/system/docker.service
+
+    systemctl enable docker.socket &&systemctl start docker.socket
+}
 ins_docker(){
     # 安装docker
     local ret
@@ -295,47 +393,15 @@ ins_docker(){
         return 0
     fi
     env_check
-    if [[ "$PG" == "apt" ]]; then
-        # Install docker with APT
-        # apt 安装docker
-        apt install gnupg2 -y
-        curl -fsSL "https://download.docker.com/linux/$OS/gpg" | apt-key add -
-        if [[ $? -ne 0 ]]; then
-            echoerr "add source public key failed ,check you network\n添加docker源公钥失败,检查您的网络配置,必要时请将download.docker.com加入代理\n"
-            return 2
-        fi
-        echo "deb https://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/$OS  $OS_CODENAME stable"  >/etc/apt/sources.list.d/docker.list
-        apt update
-        # 遍历版本号,安装不能超过限制的版本
-        for line in $(apt-cache madison docker-ce|awk '{print $3}') ; do
-            if version_le "$(echo "$line" |grep -E -o '([0-9]+\.){2}[0-9]+')" "$DOC_HIG" ; then
-                apt-mark unhold docker-ce
-                apt install -y --allow-downgrades docker-ce="$line" 
-                break
-            fi
-        done
-        apt-mark hold docker-ce 
-    elif [[ "$PG" == "yum" ]]; then
-        # Install docker with yum
-        # 同上
-        yum install -y yum-utils
-        yum-config-manager --add-repo  https://mirrors.aliyun.com/docker-ce/linux/centos/docker-ce.repo
-        yum makecache
-        for line in $(yum list docker-ce --showduplicates|grep 'docker-ce'|awk '{print $2}'|sort -r) ; do
-            if version_le "$(echo "$line" |grep -E -o '([0-9]+\.){2}[0-9]+')" "$DOC_HIG" ; then
-                yum remove  -y docer-ce docker-ce-cli
-                if echo "$line"|grep -q ':' ; then
-                    line=$(echo "$line"|awk -F: '{print $2}')
-                fi
-                yum install -y docker-ce-"$line" 
-                break
-            fi
-        done
-    else 
-        log "[error]" "package manager ${PG} not support "
-        return 1
-    fi
+    case $PG in
+        apt ) _docker_apt ;;
+        yum ) _docker_yum ;;
+        pacman ) $PG --needed --noconfirm -S docker ethtool ;;
+        * ) _docker_static ;;
+        # * ) log "[error]" "package manager ${PG} not support "; return 1 ;;
+    esac
     usermod -aG docker ${USER}
+    systemctl enable docker.socket &&systemctl start docker.socket
     systemctl enable docker.service
     systemctl start docker.service
     check_doc
@@ -391,14 +457,14 @@ _lvm_ins(){
 }
 _k8s_ins_yum(){
     printf "
-[kubernetes]
-name=Kubernetes
-baseurl=https://mirrors.aliyun.com/kubernetes/yum/repos/kubernetes-el7-$(uname -m)/
-enabled=1
-gpgcheck=1
-repo_gpgcheck=1
-gpgkey=https://mirrors.aliyun.com/kubernetes/yum/doc/yum-key.gpg https://mirrors.aliyun.com/kubernetes/yum/doc/rpm-package-key.gpg
-"> /etc/yum.repos.d/kubernetes.repo
+    [kubernetes]
+    name=Kubernetes
+    baseurl=https://mirrors.aliyun.com/kubernetes/yum/repos/kubernetes-el7-$(uname -m)/
+    enabled=1
+    gpgcheck=1
+    repo_gpgcheck=1
+    gpgkey=https://mirrors.aliyun.com/kubernetes/yum/doc/yum-key.gpg https://mirrors.aliyun.com/kubernetes/yum/doc/rpm-package-key.gpg
+    "|sed 's/    //g'> /etc/yum.repos.d/kubernetes.repo
     setenforce 0
     yum install  -y kubelet-1.12.3 kubeadm-1.12.3 kubernetes-cni-0.6.0
     yum --exclude kubelet kubeadm kubernetes-cni
@@ -413,6 +479,49 @@ _k8s_ins_apt(){
     apt-mark unhold kubelet kubeadm kubernetes-cni
     apt install -y --allow-downgrades kubeadm=1.12.3-00  kubelet=1.12.3-00 kubernetes-cni=0.6.0-00 
     apt-mark hold kubelet kubeadm kubernetes-cni
+}
+_k8s_ins_static(){
+    sysArch
+    export CNI_VERSION="v0.6.0"
+    mkdir -p /opt/cni/bin
+    wget -O- "https://github.com/containernetworking/plugins/releases/download/${CNI_VERSION}/cni-plugins-${VDIS}-${CNI_VERSION}.tgz" | tar -C /opt/cni/bin -xz
+    export CRICTL_VERSION="v1.13.0"
+    wget -O- "https://github.com/kubernetes-incubator/cri-tools/releases/download/${CRICTL_VERSION}/crictl-${CRICTL_VERSION}-linux-${VDIS}.tar.gz" | tar -C /usr/bin -xz
+
+    RELEASE="v1.12.3"
+    cd /usr/bin
+    curl -L --remote-name-all https://storage.googleapis.com/kubernetes-release/release/${RELEASE}/bin/linux/${VDIS}/{kubeadm,kubelet}
+    chmod +x {kubeadm,kubelet}
+    cd -
+
+    printf "[Unit]
+        Description=kubelet: The Kubernetes Node Agent
+        Documentation=http://kubernetes.io/docs/
+
+        [Service]
+        ExecStart=/usr/bin/kubelet
+        Restart=always
+        StartLimitInterval=0
+        RestartSec=10
+
+        [Install]
+        WantedBy=multi-user.target
+    " |sed 's/    //g' >/etc/systemd/system/kubelet.service
+    mkdir -p /etc/systemd/system/kubelet.service.d
+    printf "
+        # Note: This dropin only works with kubeadm and kubelet v1.11+
+        [Service]
+        Environment=\"KUBELET_KUBECONFIG_ARGS=--bootstrap-kubeconfig=/etc/kubernetes/bootstrap-kubelet.conf --kubeconfig=/etc/kubernetes/kubelet.conf\"
+        Environment=\"KUBELET_CONFIG_ARGS=--config=/var/lib/kubelet/config.yaml\"
+        # This is a file that \"kubeadm init\" and \"kubeadm join\" generates at runtime, populating the KUBELET_KUBEADM_ARGS variable dynamically
+        EnvironmentFile=-/var/lib/kubelet/kubeadm-flags.env
+        # This is a file that the user can use for overrides of the kubelet args as a last resort. Preferably, the user should use
+        # the .NodeRegistration.KubeletExtraArgs object in the configuration files instead. KUBELET_EXTRA_ARGS should be sourced from this file.
+        EnvironmentFile=-/etc/default/kubelet
+        ExecStart=
+        ExecStart=/usr/bin/kubelet \$KUBELET_KUBECONFIG_ARGS \$KUBELET_CONFIG_ARGS \$KUBELET_KUBEADM_ARGS \$KUBELET_EXTRA_ARGS
+    "|sed 's/    //g' >/etc/systemd/system/kubelet.service.d/10-kubeadm.conf
+    systemctl enable kubelet && systemctl start kubelet
 }
 pull_docker_image(){
     ins_docker
@@ -439,6 +548,7 @@ ins_k8s(){
         case $PG in
             apt ) _k8s_ins_apt ;;
             yum ) _k8s_ins_yum ;;
+            *    ) _k8s_ins_static ;;
         esac
         if ! check_k8s ; then
             log "[error]" "k8s install fail!"
@@ -455,7 +565,7 @@ ins_k8s(){
     net.bridge.bridge-nf-call-ip6tables = 1
     net.ipv6.conf.tun0.mtu = 1280
     net.ipv4.tcp_congestion_control = bbr
-    net.ipv4.ip_forward = 1 ">/etc/sysctl.d/k8s.conf
+    net.ipv4.ip_forward = 1 "|sed 's/    //g'>/etc/sysctl.d/k8s.conf
     modprobe br_netfilter
     printf "\ntcp_bbr\n">>/etc/modules
     sysctl -p /etc/sysctl.d/k8s.conf 2>/dev/null
@@ -498,19 +608,19 @@ _set_node_systemd(){
     if [[ ${_DON_SET_DISK} -eq 1 ]]; then
         DON_SET_DISK="--devoff"
     fi
-    cat <<EOF >/lib/systemd/system/bxc-node.service
-[Unit]
-Description=bxc node app
-After=network.target
-
-[Service]
-ExecStart=/opt/bcloud/nodeapi/node --alsologtostderr ${DON_SET_DISK} ${INSERT_STR} 
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-EOF
+    printf "
+        [Unit]
+        Description=bxc node app
+        After=network.target
+        
+        [Service]
+        ExecStart=/opt/bcloud/nodeapi/node --alsologtostderr ${DON_SET_DISK} ${INSERT_STR} 
+        Restart=always
+        RestartSec=10
+        
+        [Install]
+        WantedBy=multi-user.target
+    "|sed 's/    //g' >/lib/systemd/system/bxc-node.service
 }
 node_ins(){
     mkdir -p $BASE_DIR/{scripts,nodeapi,compute}
@@ -596,19 +706,17 @@ bxc-network_ins(){
     fi
     apt install -y liblzo2-2 libjson-c3 
     ${BASE_DIR}/bxc-network |grep libraries
-    cat <<EOF >/lib/systemd/system/bxc-network.service
-[Unit]
-Description=bxc network daemon
-After=network.target
-
-[Service]
-ExecStart=/opt/bcloud/bxc-network
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-EOF
+    printf "[Unit]
+    Description=bxc network daemon
+    After=network.target
+    
+    [Service]
+    ExecStart=/opt/bcloud/bxc-network
+    Restart=always
+    RestartSec=10
+    
+    [Install]
+    WantedBy=multi-user.target "|sed 's/    //g'>/lib/systemd/system/bxc-network.service
     systemctl enable bxc-network&&systemctl start bxc-network
 }
 bxc-network_run(){
@@ -661,28 +769,25 @@ goproxy_ins(){
     rm -rf ${TMP}/goproxy/
     mkdir -p /var/log/goproxy
     
-    cat <<EOF >/lib/systemd/system/bxc-goproxy-http.service
-[Unit]
-Description=bxc network proxy http
-After=network.target
-[Service]
-ExecStart=/usr/bin/proxy http -p [::]:8901 --log /var/log/goproxy/http_proxy.log
-Restart=always
-RestartSec=10
-[Install]
-WantedBy=multi-user.target
-EOF
-    cat <<EOF >/lib/systemd/system/bxc-goproxy-socks.service
-[Unit]
-Description=bxc network proxy socks
-After=network.target
-[Service]
-ExecStart=/usr/bin/proxy socks -p [::]:8902 --log /var/log/goproxy/socks_proxy.log
-Restart=always
-RestartSec=10
-[Install]
-WantedBy=multi-user.target
-EOF
+    printf "[Unit]
+    Description=bxc network proxy http
+    After=network.target
+    [Service]
+    ExecStart=/usr/bin/proxy http -p [::]:8901 --log /var/log/goproxy/http_proxy.log
+    Restart=always
+    RestartSec=10
+    [Install]
+    WantedBy=multi-user.target \n"|sed 's/    //g'>/lib/systemd/system/bxc-goproxy-http.service
+    printf "[Unit]
+    Description=bxc network proxy socks
+    After=network.target
+    [Service]
+    ExecStart=/usr/bin/proxy socks -p [::]:8902 --log /var/log/goproxy/socks_proxy.log
+    Restart=always
+    RestartSec=10
+    [Install]
+    WantedBy=multi-user.target \n"|sed 's/    //g' >/lib/systemd/system/bxc-goproxy-socks.service
+
     systemctl enable bxc-goproxy-http  &&systemctl start bxc-goproxy-http
     systemctl enable bxc-goproxy-socks &&systemctl start bxc-goproxy-socks
     sleep 2
@@ -828,6 +933,9 @@ only_net_set_promisc(){
         esac
     fi
 }
+only_ins_network_del_net(){
+    docker network rm bxc1 && { echoinfo "Delete success\n" ;} || echoerr "Delete error\n"
+}
 only_net_set_bridge(){
     # 设置macvlan桥接网络
     bxc_network_bridge_id=$(docker network ls -f name=bxc --format "{{.ID}}:{{.Name}}"|grep -E 'bxc-macvlan|bxc1'|awk -F: '{print $1}')
@@ -851,14 +959,21 @@ only_net_set_bridge(){
     LINK_HOSTIP=$(echo "${LINK_SUBNET}"|awk -F/ '{print $1}')
     only_net_set_promisc "$LINK"
     echoinfo "Set ip range(设置IP范围):\n";read -r -e -i "${LINK_SUBNET}" SET_RANGE
-    echo "docker network create -d macvlan --subnet=\"${LINK_SUBNET}\" \
-    --gateway=\"${LINK_GW}\" --aux-address=\"exclude_host=${LINK_HOSTIP}\" \
+    local NET_CMD
+    local AUX
+    AUX=--aux-address=$(hostname)=${LINK_HOSTIP}
+
+    NET_CMD="docker network create -d macvlan --subnet=\"${LINK_SUBNET}\" \
+    --gateway=\"${LINK_GW}\" ${AUX} \
     --ip-range=\"${SET_RANGE}\" \
-    -o parent=\"${LINK}\" -o macvlan_mode=\"bridge\" bxc1"
-    docker network create -d macvlan --subnet="${LINK_SUBNET}" \
-    --gateway="${LINK_GW}" --aux-address="exclude_host=${LINK_HOSTIP}" \
-    --ip-range="${SET_RANGE}" \
-    -o parent="${LINK}" -o macvlan_mode="bridge" bxc1
+    -o parent=${LINK} -o macvlan_mode=bridge bxc1"
+    echo "$NET_CMD"
+    #创建macvlan 网络
+    run_command "${NET_CMD}"
+    echoinfo "Config sure? [Y/n]:\n";read -r -e -i "Y" SURE_NET
+    case "$SURE_NET" in
+        N|n ) only_ins_network_del_net ;return 4 ;;
+    esac
     if [[ $_SET_PPPOE -eq 1 ]]; then
         return 0
     fi
@@ -883,11 +998,6 @@ generate_mac_addr(){
         mac_addr=$(od /dev/urandom -w6 -tx1 -An|sed -e 's/ //' -e 's/ /:/g'|head -n 1)
         echoinfo "Generate a mac address: $mac_addr\n"
     fi
-}
-run_command(){
-    #log '[info]' "$1"
-    $1
-    return $?
 }
 
 only_ins_network_docker_run(){
@@ -1071,14 +1181,16 @@ only_ins_network_vps(){
 only_ins_network_choose_plan(){
     echoinfo "choose plan:\n"
     echoinfo "\t1) run as base progress,only one(只运行基础进程,兼容性差,内存低,单开)\n"
-    echoinfo "\t2) run openwrt as docker,more(运行在docker里,兼容性好,内存占用高,可多开)\n"
+    echoinfo "\t2) run openwrt as docker, many (运行在docker里,兼容性好,内存占用高,可多开)\n"
     echoinfo "\t3) run as VPS, only one (VPS专用,只能起一个)\n"
-    echoinfo "CHOOSE [1|2|3]:"
+    echoinfo "\t4) Delete the created network (删除创建的网络)\n"
+    echoinfo "CHOOSE [1|2|3|4]:"
     read -r  CHOOSE
     case $CHOOSE in
         1 ) only_ins_network_base;;
         2 ) only_ins_network_docker_openwrt ;;
         3 ) only_ins_network_vps ;;
+        4 ) only_ins_network_del_net ;;
         * ) echowarn "\nno choose(未选择)\n";;
     esac
 }
@@ -1334,11 +1446,22 @@ mg(){
     #docker check
     doc_che_ret=$(check_doc2 >/dev/null 2>&1 ;echo $?)
     [[ ${doc_che_ret} -ne 1 ]]&& doc_v=$(docker version --format "{{.Server.Version}}")
+    [[ ${doc_che_ret} -ne 1 ]]&& doc_ps_num=$(docker ps |wc -l)
 
-    #Disk find
-    lvm_have=$(lsblk -l |grep 'BonusVolGroup')
-    [[ -n $lvm_have ]]&& mounted=$(echo "$lvm_have"|awk '{print $7}')
-    [[ -n $mounted ]] && used=$(df -h |grep "$mounted"|awk '{print $}')
+    #任务显示
+    lvm_have=$(lvs |grep -q 'BonusVolGroup';echo $?)
+    lvm_num=$(lvs |grep -c 'BonusVolGroup')
+    declare -A dict
+    # 任务类型字典
+    dict=([iqiyi]="A" [baijing]="B")
+
+    local type TYPE lvm_size lvm_free
+    type=$(lvs|grep BonusVolGroup|awk '{print $1}'|head -n 1|sed -r 's#bonusvol([A-Za-z]+)[0-9]+#\1#g')
+    TYPE=${dict[$type]}
+    lvm_size=$(lvs|grep BonusVolGroup|awk '{print $4}'|head -n 1|sed 's/\.00g//g')
+    lvm_free=$(df -h|grep $type|awk '{print $5}'|sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/ /g' -e 's/%/%%/g')
+    # [[ -n $lvm_have ]]&& mounted=$(echo "$lvm_have"|awk '{print $7}')
+    # [[ -n $mounted ]] && used=$(df -h |grep "$mounted"|awk '{print $}')
 
     #output
     echowarn "\nbxc-network:\n"
@@ -1358,7 +1481,13 @@ mg(){
     [[ -n $k8s_version ]] &&echoinfo "${k8s_version}\t"
     echowarn "\ndocker:\n"
     [[ ${doc_che_ret} -eq 1  ]] && { echoins "1";}||echoins "0"
-    [[ -n ${doc_v} ]] &&echoinfo "$doc_v\t"
+    [[ -n ${doc_v} ]] &&echoinfo "$doc_v\t\t"
+    [[ ${doc_che_ret} -eq 1  ]] || echoinfo "${doc_ps_num}"
+
+    echowarn "\nProgres:\n"
+    [[ ${lvm_have} -eq 0  ]] && { echorun "0";}|| echorun "1"
+    [[ ${lvm_have} -eq 0  ]] && echoinfo "${TYPE}-${lvm_num}-${lvm_size}\t\t"
+    [[ ${lvm_have} -eq 0  ]] && echoinfo "${lvm_free}"
     echoinfo "\n"
 }
 verifty(){
