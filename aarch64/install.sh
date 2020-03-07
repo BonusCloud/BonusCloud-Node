@@ -43,8 +43,8 @@ support_os=(
     manjaro
 )
 mirror_pods_node=(
-    "https://bonuscloud.coding.net/p/BonusCloud-Node/d/BonusCloud-Node/git/raw/master/img-modules"
     "https://bxc-node.s3.cn-east-2.jdcloud-oss.com"
+    "https://bonuscloud.coding.net/p/BonusCloud-Node/d/BonusCloud-Node/git/raw/master/img-modules"
     "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules"
 )
 mirror_pods_git=(
