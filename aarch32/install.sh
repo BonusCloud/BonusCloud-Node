@@ -1124,7 +1124,7 @@ only_ins_network_docker_openwrt(){
         return 2
     fi
     if [[ ${#bcode} -le 3 && ${bcode} -le 100 ]]; then
-        json=$(curl -fsSL "https://console.bonuscloud.io/api/bcode/getBcodeForOther/?email=${email}")
+        json=$(curl -fsSL "https://console.bonuscloud.work/api/bcode/getBcodeForOther/?email=${email}")
         # 输入为数字时,获取用户账户里的bcode,区分海内外
         if ! _get_ip_mainland ; then
             all_bcode_length=$(echo "${json}"|jq '.ret.mainland|length')
