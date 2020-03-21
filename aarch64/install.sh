@@ -1448,18 +1448,19 @@ mg(){
     [[ ${doc_che_ret} -ne 1 ]]&& doc_v=$(docker version --format "{{.Server.Version}}")
     [[ ${doc_che_ret} -ne 1 ]]&& doc_ps_num=$(docker ps |wc -l)
 
+    # 由于此部分不适合现在多任务混跑情况，故先行注释，在后面放入新的版本
     #任务显示
-    lvm_have=$(lvs |grep -q 'BonusVolGroup';echo $?)
-    lvm_num=$(lvs |grep -c 'BonusVolGroup')
-    declare -A dict
+    #lvm_have=$(lvs |grep -q 'BonusVolGroup';echo $?)
+    #lvm_num=$(lvs |grep -c 'BonusVolGroup')
+    #declare -A dict
     # 任务类型字典
-    dict=([iqiyi]="A" [baijing]="B")
+    #dict=([iqiyi]="A" [baijing]="B")
 
-    local type TYPE lvm_size lvm_free
-    type=$(lvs|grep BonusVolGroup|awk '{print $1}'|head -n 1|sed -r 's#bonusvol([A-Za-z]+)[0-9]+#\1#g')
-    TYPE=${dict[$type]}
-    lvm_size=$(lvs|grep BonusVolGroup|awk '{print $4}'|head -n 1|sed 's/\.00g//g')
-    lvm_free=$(df -h|grep $type|awk '{print $5}'|sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/ /g' -e 's/%/%%/g')
+    #local type TYPE lvm_size lvm_free
+    #type=$(lvs|grep BonusVolGroup|awk '{print $1}'|head -n 1|sed -r 's#bonusvol([A-Za-z]+)[0-9]+#\1#g')
+    #TYPE=${dict[$type]}
+    #lvm_size=$(lvs|grep BonusVolGroup|awk '{print $4}'|head -n 1|sed 's/\.00g//g')
+    #lvm_free=$(df -h|grep $type|awk '{print $5}'|sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/ /g' -e 's/%/%%/g')
     # [[ -n $lvm_have ]]&& mounted=$(echo "$lvm_have"|awk '{print $7}')
     # [[ -n $mounted ]] && used=$(df -h |grep "$mounted"|awk '{print $}')
 
@@ -1484,11 +1485,42 @@ mg(){
     [[ -n ${doc_v} ]] &&echoinfo "$doc_v\t\t"
     [[ ${doc_che_ret} -eq 1  ]] || echoinfo "${doc_ps_num}"
 
-    echowarn "\nProgres:\n"
+    echowarn "\n\nProgress and usage:\t\t"
     [[ ${lvm_have} -eq 0  ]] && { echorun "0";}|| echorun "1"
-    [[ ${lvm_have} -eq 0  ]] && echoinfo "${TYPE}-${lvm_num}-${lvm_size}\t\t"
-    [[ ${lvm_have} -eq 0  ]] && echoinfo "${lvm_free}"
-    echoinfo "\n"
+    echo ""
+    lvm_num_A=$(lvs|grep 'BonusVolGroup'|grep -c 'bonusvoliqiyi')
+    if [[ "$lvm_num_A" > 0 ]]; then 
+        lvm_size_A=$(lvs|grep BonusVolGroup|grep bonusvoliqiyi|awk '{print $4}'|head -n 1|sed 's/\.00g//g')
+        echoinfo "A-${lvm_num_A}-${lvm_size_A}\n"
+        df -h | grep dev | grep 'BonusVolGroup-bonusvoliqiyi' | awk '{print $3, $4, $5}'
+    fi
+    lvm_num_C=$(lvs|grep 'BonusVolGroup'|grep -c 'bonusvol65542')
+    if [[ "$lvm_num_C" > 0 ]]; then 
+        lvm_size_C=$(lvs|grep BonusVolGroup|grep bonusvol65542|awk '{print $4}'|head -n 1|sed 's/\.00g//g')
+        echoinfo "C-${lvm_num_C}-${lvm_size_C}\n"
+        df -h | grep dev | grep 'BonusVolGroup-bonusvol65542' | awk '{print $3, $4, $5}'
+    fi
+    lvm_num_D=$(lvs|grep 'BonusVolGroup'|grep -c 'bonusvol65541')
+    if [[ "$lvm_num_D" > 0 ]]; then 
+        lvm_size_D=$(lvs|grep BonusVolGroup|grep bonusvol65541|awk '{print $4}'|head -n 1|sed 's/\.00g//g')
+        echoinfo "D-${lvm_num_D}-${lvm_size_D}\n"
+        df -h | grep dev | grep 'BonusVolGroup-bonusvol65541' | awk '{print $3, $4, $5}'
+    fi
+    # 硬盘信息展示部分，依赖smartmontools，需要事先安装，否则无法工作
+    #echowarn "\nHard Drive information: \n"
+    #smartctl -i /dev/sda | grep 'Model Family'
+    #smartctl -i /dev/sda | grep 'Device Model'
+    #smartctl -i /dev/sda | grep 'User Capacity'
+    #smartctl -i /dev/sda | grep 'Rotation Rate'
+    #smartctl -i /dev/sda | grep 'Form Factor'
+    #smartctl -i /dev/sda | grep 'SATA Version is'
+    #smartctl -i /dev/sda | grep 'SMART overall-health self-assessment test result'
+    # 硬盘温度展示，同样依赖smartmontools   
+    #T1=$(smartctl -d sat --all /dev/sda | grep 194 | awk '{print $10}')
+    #T2=$(smartctl -d sat --all /dev/sda | grep 194 | awk '{print $11, $12}')
+    #echowarn "Hard drive Temperature: "
+    #echoinfo "${T1}" 
+    #echo " ${T2}"
 }
 verifty(){
     [ ! -s $BASE_DIR/nodeapi/node ] && return 2
