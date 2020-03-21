@@ -1485,25 +1485,47 @@ mg(){
     [[ -n ${doc_v} ]] &&echoinfo "$doc_v\t\t"
     [[ ${doc_che_ret} -eq 1  ]] || echoinfo "${doc_ps_num}"
 
-    echowarn "\n\nProgress and usage:\t\t"
+    echowarn "\n\nProgress and usage:  "
+    lvm_have=$(lvs |grep -q 'BonusVolGroup';echo $?)
     [[ ${lvm_have} -eq 0  ]] && { echorun "0";}|| echorun "1"
     echo ""
     lvm_num_A=$(lvs|grep 'BonusVolGroup'|grep -c 'bonusvoliqiyi')
     if [[ "$lvm_num_A" > 0 ]]; then 
         lvm_size_A=$(lvs|grep BonusVolGroup|grep bonusvoliqiyi|awk '{print $4}'|head -n 1|sed 's/\.00g//g')
-        echoinfo "A-${lvm_num_A}-${lvm_size_A}\n"
+        echoinfo "A-${lvm_num_A}-${lvm_size_A}  "
+        lvm_stat_A=$(lvs|grep BonusVolGroup|grep bonusvoliqiyi01|awk '{print $3}')
+        if [[ "$lvm_stat_A" == "-wi-ao----" ]]; then 
+            echoinfo "(lvm mounted)\n"
+        fi
+        if [[ "$lvm_stat_A" == "-wi-a-----" ]]; then
+            echoerr "(lvm unmounted)\n"
+        fi
         df -h | grep dev | grep 'BonusVolGroup-bonusvoliqiyi' | awk '{print $3, $4, $5}'
     fi
     lvm_num_C=$(lvs|grep 'BonusVolGroup'|grep -c 'bonusvol65542')
     if [[ "$lvm_num_C" > 0 ]]; then 
         lvm_size_C=$(lvs|grep BonusVolGroup|grep bonusvol65542|awk '{print $4}'|head -n 1|sed 's/\.00g//g')
-        echoinfo "C-${lvm_num_C}-${lvm_size_C}\n"
+        echoinfo "C-${lvm_num_C}-${lvm_size_C}  "
+        lvm_stat_C=$(lvs|grep BonusVolGroup|grep bonusvol65542v01|awk '{print $3}')
+        if [[ "$lvm_stat_C" == "-wi-ao----" ]]; then 
+            echoinfo "(lvm mounted)\n"
+        fi
+        if [[ "$lvm_stat_C" == "-wi-a-----" ]]; then
+            echoerr "(lvm unmounted)\n"
+        fi
         df -h | grep dev | grep 'BonusVolGroup-bonusvol65542' | awk '{print $3, $4, $5}'
     fi
     lvm_num_D=$(lvs|grep 'BonusVolGroup'|grep -c 'bonusvol65541')
     if [[ "$lvm_num_D" > 0 ]]; then 
         lvm_size_D=$(lvs|grep BonusVolGroup|grep bonusvol65541|awk '{print $4}'|head -n 1|sed 's/\.00g//g')
-        echoinfo "D-${lvm_num_D}-${lvm_size_D}\n"
+        echoinfo "D-${lvm_num_D}-${lvm_size_D}  "
+        lvm_stat_D=$(lvs|grep BonusVolGroup|grep bonusvol65541v01|awk '{print $3}')
+        if [[ "$lvm_stat_D" == "-wi-ao----" ]]; then 
+            echoinfo "(lvm mounted)\n"
+        fi
+        if [[ "$lvm_stat_D" == "-wi-a-----" ]]; then
+            echoerr "(lvm unmounted)\n"
+        fi
         df -h | grep dev | grep 'BonusVolGroup-bonusvol65541' | awk '{print $3, $4, $5}'
     fi
     # 硬盘信息展示部分，依赖smartmontools，需要事先安装，否则无法工作
