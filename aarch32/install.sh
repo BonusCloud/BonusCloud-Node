@@ -838,6 +838,15 @@ iostat_ins(){
         yum ) yum install sysstat -y ;;
     esac
 }
+smarttool_ins(){
+    if which smartctl  >/dev/null 2>&1; then
+        return
+    fi
+    case $PG in
+        apt|yum ) $PG install smartmontools -y ;;
+        pacman ) $PG --needed --noconfirm -S smartmontools ;;
+    esac
+}
 read_bcode_input(){
     # 交互输入bcode
     echoinfo "Input bcode:";read -r  bcode
@@ -1421,7 +1430,7 @@ mg(){
         esac
     }
     # network check
-    network_docker=$(docker images --format "{{.Repository}}"|grep -q bxc-net;echo $?)
+    network_docker=$(docker images --format "{{.Repository}}" 2>/dev/null|grep -q bxc-net;echo $?)
     network_file_have=$([[ -s ${BASE_DIR}/bxc-network || "${network_docker}" -eq 0 ]];echo $?)   
     
     network_progress=$(pgrep bxc-network>/dev/null;echo $?)
@@ -1445,23 +1454,9 @@ mg(){
 
     #docker check
     doc_che_ret=$(check_doc2 >/dev/null 2>&1 ;echo $?)
-    [[ ${doc_che_ret} -ne 1 ]]&& doc_v=$(docker version --format "{{.Server.Version}}")
-    [[ ${doc_che_ret} -ne 1 ]]&& doc_ps_num=$(docker ps |wc -l)
+    [[ ${doc_che_ret} -ne 1 ]]&& doc_v=$(docker version --format "{{.Server.Version}}" 2>/dev/null)
+    [[ ${doc_che_ret} -ne 1 ]]&& doc_ps_num=$(docker ps 2>/dev/null|wc -l)
 
-    #任务显示
-    lvm_have=$(lvs |grep -q 'BonusVolGroup';echo $?)
-    lvm_num=$(lvs |grep -c 'BonusVolGroup')
-    declare -A dict
-    # 任务类型字典
-    dict=([iqiyi]="A" [baijing]="B")
-
-    local type TYPE lvm_size lvm_free
-    type=$(lvs|grep BonusVolGroup|awk '{print $1}'|head -n 1|sed -r 's#bonusvol([A-Za-z]+)[0-9]+#\1#g')
-    TYPE=${dict[$type]}
-    lvm_size=$(lvs|grep BonusVolGroup|awk '{print $4}'|head -n 1|sed 's/\.00g//g')
-    lvm_free=$(df -h|grep $type|awk '{print $5}'|sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/ /g' -e 's/%/%%/g')
-    # [[ -n $lvm_have ]]&& mounted=$(echo "$lvm_have"|awk '{print $7}')
-    # [[ -n $mounted ]] && used=$(df -h |grep "$mounted"|awk '{print $}')
 
     #output
     echowarn "\nbxc-network:\n"
@@ -1484,11 +1479,63 @@ mg(){
     [[ -n ${doc_v} ]] &&echoinfo "$doc_v\t\t"
     [[ ${doc_che_ret} -eq 1  ]] || echoinfo "${doc_ps_num}"
 
-    echowarn "\nProgres:\n"
+    echowarn "\n\nProgress and usage:\t\t"
+    lvm_have=$(lvs 2>/dev/null|grep -q 'BonusVolGroup';echo $?)
     [[ ${lvm_have} -eq 0  ]] && { echorun "0";}|| echorun "1"
-    [[ ${lvm_have} -eq 0  ]] && echoinfo "${TYPE}-${lvm_num}-${lvm_size}\t\t"
-    [[ ${lvm_have} -eq 0  ]] && echoinfo "${lvm_free}"
-    echoinfo "\n"
+    printf "\n"
+    #任务显示
+    declare -A dict
+    # 任务类型字典
+    dict=([iqiyi]="A" [baijing]="B" [65542v]="C" [65541v]="D" [65540v]="E")
+
+    [[ ${lvm_have} -eq 0  ]] &&lvs_info=$(lvs 2>/dev/null|grep BonusVolGroup|grep bonusvol)
+    local TYPE lvm_size lvlist lvm_num
+    [[ ${lvm_have} -eq 0  ]] &&lvlist=$(echo "$lvs_info"|awk '{print $1}'|sed -r 's#bonusvol([A-Za-z0-9]+)[0-9]{2}#\1#g'|sort -ru)
+    [[ ${lvm_have} -eq 0  ]] &&echowarn "\t\t Used\t\t Avail\t\t Use%%\n"
+    for lv in $lvlist; do
+        TYPE=${dict[$lv]}
+        lvm_num=$(echo "$lvs_info"|awk '{print $1}'|grep -c "$lv")
+        lvm_size=$(echo "$lvs_info"|grep "$lv"|awk '{print $4}'|head -n 1|sed 's/\.00g//g')
+        echoinfo "${TYPE}-${lvm_num}-${lvm_size}\n"
+        
+        echo -e "$(df -h |grep "bonusvol$lv" | awk '{print "  ├──\t\t", $3, "\t\t", $4, "\t\t\033[1;32m", $5,"\033[0m"}')"
+    done
+}
+show_disk_info(){
+    smarttool_ins
+    echowarn "Power by\t"; echoinfo "404404\t" ;echoinfo "https://github.com/404404 \n"
+    # https://github.com/404404
+    local T1 T2 type
+    for sd in $(ls /dev/*|grep -E '((sd)|(vd)|(hd))[a-z]$'); do
+        for type_tmp in sat scsi nvme ata usbcypress usbjmicron usbprolific usbsunplus marvell areca 3ware hpt megaraid aacraid cciss; do
+            # echo $type_tmp
+            ret=$(smartctl -d $type_tmp --all $sd >/dev/null;echo $?)
+            # echo $ret
+            # ret=$(($ret & 8))
+            if [[ $ret -eq 4 || $ret -eq 0 ]]; then
+                type=$type_tmp
+                break
+            fi
+        done
+        echowarn "\nHard Drive information: "
+        echoinfo "\t  $sd \t type: $type\n"
+        smartinfo=$(smartctl -d $type -a "$sd")
+        # echo "$smartinfo"
+        echo "$smartinfo" | grep 'Model Family'
+        echo "$smartinfo" | grep 'Device Model'
+        echo "$smartinfo" | grep 'User Capacity'
+        echo "$smartinfo" | grep 'Rotation Rate'
+        echo "$smartinfo" | grep 'Form Factor'
+        echo "$smartinfo" | grep 'SATA Version is'
+        echo "$smartinfo" | grep 'SMART overall-health self-assessment test result'
+        # 硬盘温度展示，同样依赖smartmontools   
+        T1=$(echo "$smartinfo" | grep 194 | awk '{print $10}')
+        T2=$(echo "$smartinfo"| grep 194 | awk '{print $11, $12}')
+        echowarn "Hard drive Temperature: "
+        echoinfo "${T1}" 
+        echo " ${T2}"
+    done
+
 }
 verifty(){
     [ ! -s $BASE_DIR/nodeapi/node ] && return 2
@@ -1531,6 +1578,7 @@ displayhelp(){
         "    -r             Fully remove bonuscloud plug-ins and components"
         "    -s             Install teleport for remote debugging by developers"
         "    -t             Show all plugin running status"
+        "     └── -D        Show Disk status and info"
         "    -e             Set interfaces name to ethx,only x86_64 and using grub"
         "    -g             Install network job only"
         "     └── -H        Set ip for container"
@@ -1559,6 +1607,7 @@ displayhelp(){
         "    -r             清除所有安装的相关程序"
         "    -s             仅安装teleport远程调试程序,默认安装"
         "    -t             显示各组件运行状态"
+        "     └── -D        显示硬盘状态"
         "    -e             设置网卡名称为ethx格式,仅支持使用grub的x86设备"
         "    -g             仅安装网络任务"
         "     └── -H        网络容器指定IP"
@@ -1572,7 +1621,7 @@ displayhelp(){
         "    -Z function    运行指定函数"
         " "
         "不加参数时,默认安装计算任务组件,如加了\"仅安装..\"等参数时将安装对应组件")
-    echo -e "\033[2J"
+    # echo -e "\033[2J"
     case $_LANG in
         en_US.UTF-8|en_us )
             for i in "${!en_us_help[@]}"; do
@@ -1585,8 +1634,9 @@ displayhelp(){
             done
             ;;
     esac
+
     for i in "${!help_arr[@]}"; do
-        printf "${help_arr[$i]}\n"
+        printf "%s\n" "${help_arr[$i]}"
     done
     exit 0
 }
@@ -1602,7 +1652,7 @@ install_all(){
 _check_pg
 
 DISPLAYINFO="0"
-_LANG="${LANG}"
+_LANG=""
 _SYSARCH=1
 _INIT=0
 _NET_CONF=0
@@ -1653,7 +1703,7 @@ while  getopts "bdiknrstceghAI:DSHL:MPEZ:" opt ; do
         P ) _SET_PPPOE=1    ;;
         E ) _NEED_PUBIP=1   ;;
         Z ) ${OPTARG} ;;
-        ? ) echoerr "Unknow arg. exiting" ;displayhelp; exit 1 ;;
+        ? ) echoerr "Unknow arg. exiting\n" ;displayhelp; exit 1 ;;
     esac
 done
 [[ $_SHOW_HELP -eq 1 ]]     &&displayhelp
@@ -1661,6 +1711,7 @@ done
 [[ $_SHOW_STATUS -eq 1 && $_ONLY_NET -eq 1 ]] &&_ONLY_NET=0&& _SHOW_STATUS=0&&only_net_show
 [[ $_ONLY_NET -eq 1 && $_SET_ETHX -eq 1 ]]  &&_ONLY_NET=0 && _SET_ETHX=0&&only_net_cert_export
 [[ $_ONLY_NET -eq 1 && $_INIT -eq 1 ]]      &&_ONLY_NET=0 && _INIT=0 &&only_net_cert_import
+[[ $_DON_SET_DISK -eq 1 && $_SHOW_STATUS -eq 1 ]] &&_SHOW_STATUS=0 && show_disk_info
 [[ $_INIT -eq 1 ]]          &&init
 [[ $_DOCKER_INS -eq 1 ]]    &&ins_docker
 [[ $_NODE_INS -eq 1 ]]      &&node_ins
