@@ -51,3 +51,5 @@ Betterman（Allen Key）  https://github.com/bettermanbao For PHICOMM K2 and PHI
 枫 https://github.com/haibochu For Openwrt and Lede with MIPS and ARM
 
 Hikaru Chang https://github.com/hikaruchang For Openwrt with ARM and MIPS
+
+404404 https://github.com/404404
