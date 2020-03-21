@@ -43,8 +43,8 @@ support_os=(
     manjaro
 )
 mirror_pods_node=(
-    "https://bonuscloud.coding.net/p/BonusCloud-Node/d/BonusCloud-Node/git/raw/master/img-modules"
     "https://bxc-node.s3.cn-east-2.jdcloud-oss.com"
+    "https://bonuscloud.coding.net/p/BonusCloud-Node/d/BonusCloud-Node/git/raw/master/img-modules"
     "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules"
 )
 mirror_pods_git=(
@@ -81,6 +81,11 @@ log(){
             echowarn "${timeOut} $1 $2\n"
             ;;
     esac
+}
+run_command(){
+    #log '[info]' "$1"
+    $1
+    return $?
 }
 sysArch(){
     ARCH=$(uname -m)
@@ -928,6 +933,9 @@ only_net_set_promisc(){
         esac
     fi
 }
+only_ins_network_del_net(){
+    docker network rm bxc1 && { echoinfo "Delete success\n" ;} || echoerr "Delete error\n"
+}
 only_net_set_bridge(){
     # 设置macvlan桥接网络
     bxc_network_bridge_id=$(docker network ls -f name=bxc --format "{{.ID}}:{{.Name}}"|grep -E 'bxc-macvlan|bxc1'|awk -F: '{print $1}')
@@ -951,14 +959,21 @@ only_net_set_bridge(){
     LINK_HOSTIP=$(echo "${LINK_SUBNET}"|awk -F/ '{print $1}')
     only_net_set_promisc "$LINK"
     echoinfo "Set ip range(设置IP范围):\n";read -r -e -i "${LINK_SUBNET}" SET_RANGE
-    echo "docker network create -d macvlan --subnet=\"${LINK_SUBNET}\" \
-    --gateway=\"${LINK_GW}\" --aux-address=\"exclude_host=${LINK_HOSTIP}\" \
+    local NET_CMD
+    local AUX
+    AUX=--aux-address=$(hostname)=${LINK_HOSTIP}
+
+    NET_CMD="docker network create -d macvlan --subnet=\"${LINK_SUBNET}\" \
+    --gateway=\"${LINK_GW}\" ${AUX} \
     --ip-range=\"${SET_RANGE}\" \
-    -o parent=\"${LINK}\" -o macvlan_mode=\"bridge\" bxc1"
-    docker network create -d macvlan --subnet="${LINK_SUBNET}" \
-    --gateway="${LINK_GW}" --aux-address="exclude_host=${LINK_HOSTIP}" \
-    --ip-range="${SET_RANGE}" \
-    -o parent="${LINK}" -o macvlan_mode="bridge" bxc1
+    -o parent=${LINK} -o macvlan_mode=bridge bxc1"
+    echo "$NET_CMD"
+    #创建macvlan 网络
+    run_command "${NET_CMD}"
+    echoinfo "Config sure? [Y/n]:\n";read -r -e -i "Y" SURE_NET
+    case "$SURE_NET" in
+        N|n ) only_ins_network_del_net ;return 4 ;;
+    esac
     if [[ $_SET_PPPOE -eq 1 ]]; then
         return 0
     fi
@@ -983,11 +998,6 @@ generate_mac_addr(){
         mac_addr=$(od /dev/urandom -w6 -tx1 -An|sed -e 's/ //' -e 's/ /:/g'|head -n 1)
         echoinfo "Generate a mac address: $mac_addr\n"
     fi
-}
-run_command(){
-    #log '[info]' "$1"
-    $1
-    return $?
 }
 
 only_ins_network_docker_run(){
@@ -1114,7 +1124,7 @@ only_ins_network_docker_openwrt(){
         return 2
     fi
     if [[ ${#bcode} -le 3 && ${bcode} -le 100 ]]; then
-        json=$(curl -fsSL "https://console.bonuscloud.io/api/bcode/getBcodeForOther/?email=${email}")
+        json=$(curl -fsSL "https://console.bonuscloud.work/api/bcode/getBcodeForOther/?email=${email}")
         # 输入为数字时,获取用户账户里的bcode,区分海内外
         if ! _get_ip_mainland ; then
             all_bcode_length=$(echo "${json}"|jq '.ret.mainland|length')
@@ -1171,14 +1181,16 @@ only_ins_network_vps(){
 only_ins_network_choose_plan(){
     echoinfo "choose plan:\n"
     echoinfo "\t1) run as base progress,only one(只运行基础进程,兼容性差,内存低,单开)\n"
-    echoinfo "\t2) run openwrt as docker,more(运行在docker里,兼容性好,内存占用高,可多开)\n"
+    echoinfo "\t2) run openwrt as docker, many (运行在docker里,兼容性好,内存占用高,可多开)\n"
     echoinfo "\t3) run as VPS, only one (VPS专用,只能起一个)\n"
-    echoinfo "CHOOSE [1|2|3]:"
+    echoinfo "\t4) Delete the created network (删除创建的网络)\n"
+    echoinfo "CHOOSE [1|2|3|4]:"
     read -r  CHOOSE
     case $CHOOSE in
         1 ) only_ins_network_base;;
         2 ) only_ins_network_docker_openwrt ;;
         3 ) only_ins_network_vps ;;
+        4 ) only_ins_network_del_net ;;
         * ) echowarn "\nno choose(未选择)\n";;
     esac
 }
@@ -1436,13 +1448,13 @@ mg(){
     [[ ${doc_che_ret} -ne 1 ]]&& doc_v=$(docker version --format "{{.Server.Version}}")
     [[ ${doc_che_ret} -ne 1 ]]&& doc_ps_num=$(docker ps |wc -l)
 
-    #由于此部分不适合现在多任务混跑情况，故先行注释，在后面放入新的版本
+    # 由于此部分不适合现在多任务混跑情况，故先行注释，在后面放入新的版本
     #任务显示
-    #lvm_have=$(lvs | grep -q 'BonusVolGroup';echo $?)
-    #lvm_num=$(lvs | grep -c 'BonusVolGroup')
+    #lvm_have=$(lvs |grep -q 'BonusVolGroup';echo $?)
+    #lvm_num=$(lvs |grep -c 'BonusVolGroup')
     #declare -A dict
     # 任务类型字典
-    #dict=([iqiyi]="A" [baijing]="B" [65542]="C" [65541]="D")
+    #dict=([iqiyi]="A" [baijing]="B")
 
     #local type TYPE lvm_size lvm_free
     #type=$(lvs|grep BonusVolGroup|awk '{print $1}'|head -n 1|sed -r 's#bonusvol([A-Za-z]+)[0-9]+#\1#g')
@@ -1459,16 +1471,16 @@ mg(){
     [ "${network_progress}" -ne 0 ]&&{ echorun "1";}||echorun "0"
     [ "${tun0exits}" -ne 0 ] && { echoerr "tun0 not create\t";}  || echoinfo "tun0 run!\t"
     [ "${goproxy_progress}" -ne 0 ]&&{ echorun "1";}||echorun "0"
-    echowarn "\n\nbxc-node:\n"
+    echowarn "\nbxc-node:\n"
     echo -e -n "|install?\t|running?\t|version\n"
     [ "${node_file}" -ne 0 ]&&{ echoins "1";}||echoins "0"
     [ "${node_progress}" -ne 0 ]&&{ echorun "1";}||echorun "0"
     [ "${node_progress}" -eq 0 ]&&echoinfo "${node_version}"
-    echowarn "\n\nk8s:\n"
+    echowarn "\nk8s:\n"
     [ "${k8s_file}" -ne 0 ]&&{ echoins "1";}||echoins "0"
     [ "${k8s_progress}" -ne 0 ]&&{ echorun "1";}||echorun "0"
     [[ -n $k8s_version ]] &&echoinfo "${k8s_version}\t"
-    echowarn "\n\ndocker:\n"
+    echowarn "\ndocker:\n"
     [[ ${doc_che_ret} -eq 1  ]] && { echoins "1";}||echoins "0"
     [[ -n ${doc_v} ]] &&echoinfo "$doc_v\t\t"
     [[ ${doc_che_ret} -eq 1  ]] || echoinfo "${doc_ps_num}"
@@ -1494,21 +1506,21 @@ mg(){
         echoinfo "D-${lvm_num_D}-${lvm_size_D}\n"
         df -h | grep dev | grep 'BonusVolGroup-bonusvol65541' | awk '{print $3, $4, $5}'
     fi
-# 硬盘信息展示部分，依赖smartmontools，需要事先安装，否则无法工作
-#    echowarn "\nHard Drive information: \n"
-#    smartctl -i /dev/sda | grep 'Model Family'
-#    smartctl -i /dev/sda | grep 'Device Model'
-#    smartctl -i /dev/sda | grep 'User Capacity'
-#    smartctl -i /dev/sda | grep 'Rotation Rate'
-#    smartctl -i /dev/sda | grep 'Form Factor'
-#    smartctl -i /dev/sda | grep 'SATA Version is'
-#    smartctl -i /dev/sda | grep 'SMART overall-health self-assessment test result'
-# 硬盘温度展示，同样依赖smartmontools   
-#    T1=$(smartctl -d sat --all /dev/sda | grep 194 | awk '{print $10}')
-#    T2=$(smartctl -d sat --all /dev/sda | grep 194 | awk '{print $11, $12}')
-#    echowarn "Hard drive Temperature: "
-#    echoinfo "${T1}" 
-#    echo " ${T2}"
+    # 硬盘信息展示部分，依赖smartmontools，需要事先安装，否则无法工作
+    #echowarn "\nHard Drive information: \n"
+    #smartctl -i /dev/sda | grep 'Model Family'
+    #smartctl -i /dev/sda | grep 'Device Model'
+    #smartctl -i /dev/sda | grep 'User Capacity'
+    #smartctl -i /dev/sda | grep 'Rotation Rate'
+    #smartctl -i /dev/sda | grep 'Form Factor'
+    #smartctl -i /dev/sda | grep 'SATA Version is'
+    #smartctl -i /dev/sda | grep 'SMART overall-health self-assessment test result'
+    # 硬盘温度展示，同样依赖smartmontools   
+    #T1=$(smartctl -d sat --all /dev/sda | grep 194 | awk '{print $10}')
+    #T2=$(smartctl -d sat --all /dev/sda | grep 194 | awk '{print $11, $12}')
+    #echowarn "Hard drive Temperature: "
+    #echoinfo "${T1}" 
+    #echo " ${T2}"
 }
 verifty(){
     [ ! -s $BASE_DIR/nodeapi/node ] && return 2
