@@ -1505,11 +1505,21 @@ show_disk_info(){
     smarttool_ins
     echowarn "Power by\t"; echoinfo "404404\t" ;echoinfo "https://github.com/404404 \n"
     # https://github.com/404404
-    local T1 T2
-    for sd in $(smartctl --scan|awk '{print $1}'); do
+    local T1 T2 type
+    for sd in $(ls /dev/*|grep -E '((sd)|(vd)|(hd))[a-z]$'); do
+        for type_tmp in sat scsi nvme ata usbcypress usbjmicron usbprolific usbsunplus marvell areca 3ware hpt megaraid aacraid cciss; do
+            # echo $type_tmp
+            ret=$(smartctl -d $type_tmp --all $sd >/dev/null;echo $?)
+            # echo $ret
+            # ret=$(($ret & 8))
+            if [[ $ret -eq 4 || $ret -eq 0 ]]; then
+                type=$type_tmp
+                break
+            fi
+        done
         echowarn "\nHard Drive information: "
-        echoinfo "\t  $sd\n"
-        smartinfo=$(smartctl --all "$sd")
+        echoinfo "\t  $sd \t type: $type\n"
+        smartinfo=$(smartctl -d $type -a "$sd")
         # echo "$smartinfo"
         echo "$smartinfo" | grep 'Model Family'
         echo "$smartinfo" | grep 'Device Model'
