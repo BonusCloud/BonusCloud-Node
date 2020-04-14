@@ -1479,14 +1479,17 @@ mg(){
     [[ -n ${doc_v} ]] &&echoinfo "$doc_v\t\t"
     [[ ${doc_che_ret} -eq 1  ]] || echoinfo "${doc_ps_num}"
 
-    echowarn "\n\nProgress and usage:\t\t"
+    echowarn "\n\nProgress:  "
     lvm_have=$(lvs 2>/dev/null|grep -q 'BonusVolGroup';echo $?)
     [[ ${lvm_have} -eq 0  ]] && { echorun "0";}|| echorun "1"
-    printf "\n"
+    echowarn "Available space:  "
+    free_space=$(vgdisplay | grep 'Free  PE / Size' | awk '{print $7,$8}' | sed 's/\iB//g')
+    echoinfo "${free_space}B\n"
     #任务显示
     declare -A dict
     # 任务类型字典
-    dict=([iqiyi]="A" [baijing]="B" [65542v]="C" [65541v]="D" [65540v]="E")
+    # 修正B任务字典，同时添加F任务字典
+    dict=([iqiyi]="A" [yunduan]="B" [65542v]="C" [65541v]="D" [65540v]="F")
 
     [[ ${lvm_have} -eq 0  ]] &&lvs_info=$(lvs 2>/dev/null|grep BonusVolGroup|grep bonusvol)
     local TYPE lvm_size lvlist lvm_num
@@ -1503,7 +1506,11 @@ mg(){
 }
 show_disk_info(){
     smarttool_ins
-    echowarn "Power by\t"; echoinfo "404404\t" ;echoinfo "https://github.com/404404 \n"
+    echowarn "Power by: "
+    echoinfo "smartctl "
+    printf "(https://www.smartmontools.org) & "
+    echoinfo "404404 "
+    printf "(https://github.com/404404) \n"
     # https://github.com/404404
     local T1 T2 type
     for sd in $(ls /dev/*|grep -E '((sd)|(vd)|(hd))[a-z]$'); do
@@ -1517,23 +1524,21 @@ show_disk_info(){
                 break
             fi
         done
-        echowarn "\nHard Drive information: "
-        echoinfo "\t  $sd \t type: $type\n"
-        smartinfo=$(smartctl -d $type -a "$sd")
-        # echo "$smartinfo"
-        echo "$smartinfo" | grep 'Model Family'
-        echo "$smartinfo" | grep 'Device Model'
-        echo "$smartinfo" | grep 'User Capacity'
-        echo "$smartinfo" | grep 'Rotation Rate'
-        echo "$smartinfo" | grep 'Form Factor'
-        echo "$smartinfo" | grep 'SATA Version is'
-        echo "$smartinfo" | grep 'SMART overall-health self-assessment test result'
-        # 硬盘温度展示，同样依赖smartmontools   
-        T1=$(echo "$smartinfo" | grep 194 | awk '{print $10}')
-        T2=$(echo "$smartinfo"| grep 194 | awk '{print $11, $12}')
-        echowarn "Hard drive Temperature: "
-        echoinfo "${T1}" 
-        echo " ${T2}"
+        
+        echowarn "\nDisk: "
+        echoinfo "$sd\t Type: $type\t"
+        smarttemp=$(smartctl -d $type -a "$sd" | grep 194)
+        T1=$(echo "$smarttemp" | awk '{print $10}')
+        T2=$(echo "$smarttemp" | awk '{print $11, $12}')
+        echowarn "Temperature: "
+        echoinfo "${T1}°C"
+        printf " ${T2}\n"
+        echowarn "SMART overall-health self-assessment test result: "
+        smartctl -d $type -H "$sd" | grep 'SMART overall-health self-assessment test result' | awk '{print $6}'
+        echowarn "Hard drive information: \n"
+        smartctl -d $type -i "$sd" | sed '1,4d' | sed '$d'
+        echowarn "Hard drive smart data: \n"
+        smartctl -d $type -A "$sd" | sed '1,4d'
     done
 
 }
