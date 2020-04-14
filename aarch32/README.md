@@ -35,12 +35,23 @@ or use APP
 ### help
 
     -h       Print this and exit
+     └── -L        Specify help language,like -h -L zh_cn
+    -b       bound for command
+    -d       Only install docker
+    -c       change kernel to compiled dedicated kernels,only "Phicomm N1" and is danger!
     -i       Installation environment check and initialization
-    -k       Install the k8s environment and the k8s components that"
-             BonusCloud depends on
+    -k       Install the k8s environment and the k8s components that BonusCloud depends on
     -n       Install node management components
     -r       Fully remove bonuscloud plug-ins and components
     -s       Install teleport for remote debugging by developers
+    -t       Show all plugin running status
+     └── -D        Show Disk status and info
+    -e       Set interfaces name to ethx,only x86_64 and using grub
+    -g       Install network job only"
+     └── -H        Set ip for container"
+     └── -M        skip bxc-net docker image download"
+     └── -e        export only network job certificate"
+     └── -i        import only network job certificate"
+    -A       Install all task component"
+    -D       Don't set disk for node program
     -I       set interface name to you want
-    -c       change kernel to compiled dedicated kernels,only "Phicomm N1
-             and is danger!
