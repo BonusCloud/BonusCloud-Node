@@ -35,7 +35,7 @@ or use APP
 ### help
 
     -h       Print this and exit
-    └── -L        Specify help language,like -h -L zh_cn
+     └── -L        Specify help language,like -h -L zh_cn
     -b       bound for command
     -d       Only install docker
     -c       change kernel to compiled dedicated kernels,only "Phicomm N1" and is danger!
