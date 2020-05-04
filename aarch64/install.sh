@@ -626,11 +626,11 @@ node_ins(){
     mkdir -p $BASE_DIR/{scripts,nodeapi,compute}
     # 安装node组件
     # 区分kernel版本下载文件
-    kel_v=$(uname -r|grep -E -o '([0-9]+\.){2}[0-9]')
+    # kel_v=$(uname -r|grep -E -o '([0-9]+\.){2}[0-9]')
 
-    if  version_ge "$kel_v" "5.0.0" ; then
-        Rlink="5.0.0-aml-N1-BonusCloud"
-    fi
+    # if  version_ge "$kel_v" "5.0.0" ; then
+    #     Rlink="5.0.0-aml-N1-BonusCloud"
+    # fi
     # 下载文件列表
     [[ ! -f $TMP/info.txt ]]&&down "info.txt" "$TMP/info.txt"
     if [ ! -s "$TMP/info.txt" ]; then
