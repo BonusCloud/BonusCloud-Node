@@ -1,3 +1,3 @@
-bxc-node_aarch64:773604d1933790908a179042929319be:/opt/bcloud/nodeapi/node:0755
-bxc-node_armv7l:f55234be8db4b890518d3c76d5219eda:/opt/bcloud/nodeapi/node:0755
-bxc-node_x86_64:1ef3c0eefb41af1a2aebf8256723c8d2:/opt/bcloud/nodeapi/node:0755
+bxc-node_aarch64:309b9b156acb0041735442056738fe62:/opt/bcloud/nodeapi/node:0755
+bxc-node_armv7l:f7155cf7823015d981bdc8127247a3a7:/opt/bcloud/nodeapi/node:0755
+bxc-node_x86_64:fe4e5f0f2c7a3eac9456751477f51710:/opt/bcloud/nodeapi/node:0755
