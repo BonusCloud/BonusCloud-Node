@@ -31,7 +31,7 @@ LOG_FILE="ins.log"
 
 K8S_LOW="1.12.3"
 DOC_LOW="1.11.1"
-DOC_HIG="18.06.4"
+DOC_HIG="19.03.12"
 
 support_os=(
     centos
@@ -168,14 +168,33 @@ _check_pg(){
         # log "[info]" "Find pacman"
         PG="pacman"
     else
-        log "[error]" "\"apt\" or \"yum\" ,not found ,exit "
+        log "[error]" "\"apt\" or \"yum\" or \"pacman\" ,not found ,exit "
         exit 1
+    fi
+}
+_check_exec(){
+    which "$1" >/dev/null 2>&1
+    return $?
+}
+_install_pg(){
+    [[ -z $PG ]] &&_check_pg
+    case ${PG} in
+        apt ) $PG install -y "$1";;
+        yum ) $PG install -y "$1" ;;
+        pacman ) $PG --needed --noconfirm -S "$1"
+    esac
+    if [[ -n "$2" ]]; then
+        _install_pg $2
+    fi
+    if [[ $? -ne 0 ]]; then
+        case ${PG} in
+            apt )  $PG update&& _install_pg "$1" apt-transport-https ;;
+            yum ) $PG makecache&& _install_pg "$1" ;;
+        esac
     fi
 }
 env_check(){
     # 检查环境
-    # ret_c=$(which curl >/dev/null 2>&1;echo $?)
-    # ret_w=$(which wget >/dev/null 2>&1;echo $?)
     # Check if the system supports
     sys_osname
     echo "$OS"
@@ -185,12 +204,10 @@ env_check(){
     else
         log "[info]" "system : $OS ;Package manager $PG"
     fi
-    _check_pg
-    case ${PG} in
-        apt ) $PG install -y curl wget apt-transport-https pciutils;;
-        yum ) $PG install -y curl wget ;;
-        pacman ) $PG --needed --noconfirm -S curl wget 
-    esac
+    ! _check_exec curl &&_install_pg curl
+    ! _check_exec wget &&_install_pg wget
+    ! _check_exec lspci &&_install_pg pciutils
+    
 }
 down(){
     # 根据设置的源下载文件,错误时切换源
@@ -400,7 +417,7 @@ ins_docker(){
         * ) _docker_static ;;
         # * ) log "[error]" "package manager ${PG} not support "; return 1 ;;
     esac
-    usermod -aG docker ${USER}
+    [ -n "${USER}" ] && usermod -aG docker "${USER}"
     systemctl enable docker.socket &&systemctl start docker.socket
     systemctl enable docker.service
     systemctl start docker.service
@@ -626,11 +643,11 @@ node_ins(){
     mkdir -p $BASE_DIR/{scripts,nodeapi,compute}
     # 安装node组件
     # 区分kernel版本下载文件
-    kel_v=$(uname -r|grep -E -o '([0-9]+\.){2}[0-9]')
+    # kel_v=$(uname -r|grep -E -o '([0-9]+\.){2}[0-9]')
 
-    if  version_ge "$kel_v" "5.0.0" ; then
-        Rlink="5.0.0-aml-N1-BonusCloud"
-    fi
+    # if  version_ge "$kel_v" "5.0.0" ; then
+    #     Rlink="5.0.0-aml-N1-BonusCloud"
+    # fi
     # 下载文件列表
     [[ ! -f $TMP/info.txt ]]&&down "info.txt" "$TMP/info.txt"
     if [ ! -s "$TMP/info.txt" ]; then
@@ -1489,11 +1506,12 @@ mg(){
     declare -A dict
     # 任务类型字典
     # 修正B任务字典，同时添加F任务字典
-    dict=([iqiyi]="A" [yunduan]="B" [65542v]="C" [65541v]="D" [65540v]="F")
+    dict=([iqiyi]="A" [yunduan]="B" [65542v]="C" [65541v]="D" [65540v]="F" [65546v]="G")
 
     [[ ${lvm_have} -eq 0  ]] &&lvs_info=$(lvs 2>/dev/null|grep BonusVolGroup|grep bonusvol)
     local TYPE lvm_size lvlist lvm_num
-    [[ ${lvm_have} -eq 0  ]] &&lvlist=$(echo "$lvs_info"|awk '{print $1}'|sed -r 's#bonusvol([A-Za-z0-9]+)[0-9]{2}#\1#g'|sort -ru)
+    # 修正B任务字典后，将按照首字母倒序改为按第四个字母倒序来避免B任务在A任务前面不符合顺序
+    [[ ${lvm_have} -eq 0  ]] &&lvlist=$(echo "$lvs_info"|awk '{print $1}'|sed -r 's#bonusvol([A-Za-z0-9]+)[0-9]{2}#\1#g'|sort -ru -k 1.4)
     [[ ${lvm_have} -eq 0  ]] &&echowarn "\t\t Used\t\t Avail\t\t Use%%\n"
     for lv in $lvlist; do
         TYPE=${dict[$lv]}
@@ -1720,11 +1738,11 @@ done
 [[ $_INIT -eq 1 ]]          &&init
 [[ $_DOCKER_INS -eq 1 ]]    &&ins_docker
 [[ $_NODE_INS -eq 1 ]]      &&node_ins
+[[ $_K8S_INS -eq 1 ]]       &&ins_k8s
 [[ $_TELEPORT -eq 1 ]]      &&teleport_ins
 [[ $_SYSSTAT -eq 1 ]]       &&iostat_ins
 [[ $_CHANGE_KN -eq 1 ]]     &&ins_kernel
 [[ $_ONLY_NET -eq 1 ]]      &&only_ins_network_choose_plan
-[[ $_K8S_INS -eq 1 ]]       &&ins_k8s
 [[ $_NET_CONF -eq 1 ]]      &&ins_conf
 [[ $_BOUND -eq 1 ]]         &&bound
 [[ $_SET_ETHX -eq 1 ]]      &&set_interfaces_name
