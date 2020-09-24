@@ -485,6 +485,7 @@ _k8s_ins_yum(){
     setenforce 0
     yum install  -y kubelet-1.12.3 kubeadm-1.12.3 kubernetes-cni-0.6.0
     yum --exclude kubelet kubeadm kubernetes-cni
+    systemctl stop firewalld &>/dev/null && systemctl disable firewalld &> /dev/null
     systemctl enable kubelet && systemctl start kubelet
     
 }
