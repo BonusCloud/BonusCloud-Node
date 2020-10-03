@@ -485,8 +485,8 @@ _k8s_ins_yum(){
     setenforce 0
     yum install  -y kubelet-1.12.3 kubeadm-1.12.3 kubernetes-cni-0.6.0
     yum --exclude kubelet kubeadm kubernetes-cni
+    systemctl stop firewalld && systemctl disable firewalld
     systemctl enable kubelet && systemctl start kubelet
-    
 }
 _k8s_ins_apt(){
     curl -L https://mirrors.aliyun.com/kubernetes/apt/doc/apt-key.gpg | apt-key add -
@@ -1014,6 +1014,9 @@ generate_mac_addr(){
     if [[ -z $mac_head ]]; then
         local mac_head_tmp
         mac_head_tmp=$(od /dev/urandom -w2 -tx1 -An|sed -e 's/ //' -e 's/ /:/g'|head -n 1)
+        while grep -qE '^(.[13579bdf])' <<< "$mac_head_tmp" ; do
+            mac_head_tmp=$(od /dev/urandom -w2 -tx1 -An|sed -e 's/ //' -e 's/ /:/g'|head -n 1)
+        done
         echoinfo "Set mac address:\n";read -r -e -i "${mac_head_tmp}:${random_mac_addr}" mac_addr
     else
         echoinfo "Set mac address:\n";read -r -e -i "${mac_head}:${random_mac_addr}" mac_addr
