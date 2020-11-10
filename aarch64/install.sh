@@ -483,7 +483,7 @@ _k8s_ins_yum(){
     gpgkey=https://mirrors.aliyun.com/kubernetes/yum/doc/yum-key.gpg https://mirrors.aliyun.com/kubernetes/yum/doc/rpm-package-key.gpg
     "|sed 's/    //g'> /etc/yum.repos.d/kubernetes.repo
     setenforce 0
-    yum install  -y kubelet-1.12.3 kubeadm-1.12.3 kubernetes-cni-0.6.0
+    yum install  -y kubelet-1.12.3 kubeadm-1.12.3 kubectl-1.12.3 kubernetes-cni-0.6.0
     yum --exclude kubelet kubeadm kubernetes-cni
     systemctl stop firewalld && systemctl disable firewalld
     systemctl enable kubelet && systemctl start kubelet
@@ -494,7 +494,7 @@ _k8s_ins_apt(){
     log "[info]" "installing k8s"
     apt update
     apt-mark unhold kubelet kubeadm kubernetes-cni
-    apt install -y --allow-downgrades kubeadm=1.12.3-00  kubelet=1.12.3-00 kubernetes-cni=0.6.0-00 
+    apt install -y --allow-downgrades kubeadm=1.12.3-00  kubelet=1.12.3-00 kubectl=1.12.3-00 kubernetes-cni=0.6.0-00 
     apt-mark hold kubelet kubeadm kubernetes-cni
 }
 _k8s_ins_static(){
@@ -591,8 +591,8 @@ ins_k8s(){
 k8s_remove(){
     kubeadm reset -f
     case $PG in
-        yum ) $PG remove -y kubeadm kubelet  ;;
-        apt ) $PG remove -y kubeadm kubelet --allow-change-held-packages ;;
+        yum ) $PG remove -y kubeadm kubelet kubectl ;;
+        apt ) $PG remove -y kubeadm kubelet kubectl --allow-change-held-packages ;;
     esac
     rm -rf /etc/sysctl.d/k8s.conf
 }
