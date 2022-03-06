@@ -1583,8 +1583,7 @@ mg(){
     #任务显示
     declare -A dict
     # 任务类型字典
-    # 修正B任务字典，同时添加F任务字典
-    dict=([iqiyi]="A" [yunduan]="B" [65542v]="C" [65541v]="D" [65540v]="F" [65546v]="G")
+    dict=([iqiyi]="A" [yunduan]="B" [65542v]="C" [65541v]="D" [65540v]="F" [65546v]="G" [65539v]="H")
 
     [[ ${lvm_have} -eq 0  ]] &&lvs_info=$(lvs 2>/dev/null|grep BonusVolGroup|grep bonusvol)
     local TYPE lvm_size lvlist lvm_num
@@ -1607,7 +1606,6 @@ show_disk_info(){
     printf "(https://www.smartmontools.org) & "
     echoinfo "404404 "
     printf "(https://github.com/404404) \n"
-    # https://github.com/404404
     local T1 T2 type
     for sd in $(ls /dev/*|grep -E '((sd)|(vd)|(hd))[a-z]$'); do
         for type_tmp in sat scsi nvme ata usbcypress usbjmicron usbprolific usbsunplus marvell areca 3ware hpt megaraid aacraid cciss; do
