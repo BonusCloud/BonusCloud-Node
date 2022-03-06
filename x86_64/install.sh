@@ -8,6 +8,7 @@ OS_CODENAME=""
 PG=""
 ARCH=""
 VDIS=""
+CRI=docker
 BASE_DIR="/opt/bcloud"
 NODE_INFO="$BASE_DIR/node.db"
 SSL_CA="$BASE_DIR/ca.crt"
@@ -31,7 +32,7 @@ LOG_FILE="ins.log"
 
 K8S_LOW="1.12.3"
 DOC_LOW="1.11.1"
-DOC_HIG="19.03.12"
+DOC_HIG="20.12.12"
 
 support_os=(
     centos
@@ -52,12 +53,9 @@ mirror_pods_git=(
     "https://bonuscloud.coding.net/p/BonusCloud-Node/d/BonusCloud-Node/git/raw/master"
 )
 
-echoerr(){ printf "\033[1;31m$1\033[0m" 
-}
-echoinfo(){ printf "\033[1;32m$1\033[0m"
-}
-echowarn(){ printf "\033[1;33m$1\033[0m"
-}
+echoerr(){ printf "\033[1;31m$1\033[0m";}
+echoinfo(){ printf "\033[1;32m$1\033[0m";}
+echowarn(){ printf "\033[1;33m$1\033[0m";}
 echo-(){
     local columns
     columns=$(stty size 2>/dev/null|awk '{print $2}')
@@ -431,6 +429,34 @@ ins_docker(){
         systemctl enable docker &&systemctl start docker
     fi
 }
+ins_podman(){
+    env_check
+    case $PG in
+        apt ) apt install -y podman ;;
+        pacman ) $PG --needed --noconfirm -S podman ;;
+         * ) log "[error]" "package manager ${PG} not support podman"; return 1 ;;
+    esac
+    if ! cat /etc/containers/registries.conf | grep -v '^#'|grep -q 'docker.io' ; then
+        echo 'unqualified-search-registries=["docker.io"]' >> /etc/containers/registries.conf
+    fi
+    if [[ -s /lib/systemd/system/podman-restart.service ]] ; then
+    	systemctl enable podman-restart.service
+    	return 0
+    fi
+    mkdir -p /usr/local/bin
+    printf '#!/bin/bash
+    podman ps -a|grep -v CON|cut -d " " -f1|while read line;
+    do
+	if [[ $(podman inspect -f "{{ .HostConfig.RestartPolicy.Name }}" $line ) == "always" ]] ;then
+		podman start $line
+	fi
+    done\n'| sed 's/    //g' > /usr/local/bin/podman-restart.sh
+    chmod +x /usr/local/bin/podman-restart.sh
+    if ! grep -q 'podman-restart' /etc/rc.local ; then
+    	sed -i "/exit/i\/usr/local/bin/podman-restart.sh" /etc/rc.local
+    fi
+}
+
 jq_yum_ins(){
     # 安装EPEL仓库就为了装个jq,可恶
     wget -O $TMP/epel-release-latest-7.noarch.rpm http://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
@@ -911,14 +937,14 @@ only_ins_network_base(){
 }
 only_net_check_network(){
     echoinfo "Testing network... \n"
-    network_result=$(docker run --rm -it --net=bxc1 "qinghon/bxc-net:$VDIS" \
+    network_result=$($CRI run --rm -it --net=bxc1 "$image_name" \
     /bin/sh -c "curl -m 3 -fs baidu.com -o /dev/null >/dev/null 2>&1";echo $?)
     if [[ $network_result -ne 0 ]]; then
         echoerr "This bridge network can not connect network,curl return $network_result\n"
         read -r -e -p "Delete this network?:" -i "Y" -t 5 choose
         choose=${choose:-"Y"}
         case $choose in
-            Y|y ) docker network rm bxc1 &&echoerr "\nDelete success\n";;
+            Y|y ) $CRI network rm bxc1 &&echoerr "\nDelete success\n";;
             *   ) echoerr "\nCancel!\n";;
         esac
         return 1
@@ -939,7 +965,7 @@ only_net_set_promisc(){
         echo -e '#!/bin/bash\nexit 0'>/etc/rc.local
         chmod 755 /etc/rc.local
         systemctl enable rc-local.service
-        systemctl enable rc.local.service
+        systemctl enable rc.local.service 2>/dev/null
     fi
     if ! grep -q "${LINK} promisc" /etc/rc.local ; then
         sed -i "/exit/i\ip link set ${LINK} promisc on" /etc/rc.local
@@ -960,11 +986,38 @@ only_net_set_promisc(){
     fi
 }
 only_ins_network_del_net(){
-    docker network rm bxc1 && { echoinfo "Delete success\n" ;} || echoerr "Delete error\n"
+    $CRI network rm bxc1 && { echoinfo "Delete success\n" ;} || echoerr "Delete error\n"
 }
+only_ins_network_podman_dhcp(){
+    printf "%s\n" '[Unit]
+    Description=DHCP Client for CNI
+
+    [Socket]
+    ListenStream=%t/cni/dhcp.sock
+    SocketMode=0600
+
+    [Install]
+    WantedBy=sockets.target'| sed 's/    //g' > /usr/lib/systemd/system/io.podman.dhcp.socket
+    printf "[Unit]
+    Description=DHCP Client CNI Service
+    Requires=io.podman.dhcp.socket
+    After=io.podman.dhcp.socket
+
+    [Service]
+    Type=simple
+    ExecStart=/usr/lib/cni/dhcp daemon
+    TimeoutStopSec=30
+    KillMode=process
+
+    [Install]
+    WantedBy=multi-user.target
+    Also=io.podman.dhcp.socket\n"| sed 's/    //g' > /usr/lib/systemd/system/io.podman.dhcp.service
+    systemctl --now enable io.podman.dhcp.socket
+}
+
 only_net_set_bridge(){
     # 设置macvlan桥接网络
-    bxc_network_bridge_id=$(docker network ls -f name=bxc --format "{{.ID}}:{{.Name}}"|grep -E 'bxc-macvlan|bxc1'|awk -F: '{print $1}')
+    bxc_network_bridge_id=$($CRI network ls -f name=bxc --format "{{.ID}}:{{.Name}}"|grep -E 'bxc-macvlan|bxc1'|awk -F: '{print $1}')
     if [[ -n "${bxc_network_bridge_id}" ]]; then
         return 0
     fi
@@ -984,14 +1037,24 @@ only_net_set_bridge(){
     LINK_SUBNET=$(ip addr show "${LINK}"|grep 'inet '|awk '{print $2}')
     LINK_HOSTIP=$(echo "${LINK_SUBNET}"|awk -F/ '{print $1}')
     only_net_set_promisc "$LINK"
-    echoinfo "Set ip range(设置IP范围):\n";read -r -e -i "${LINK_SUBNET}" SET_RANGE
+    if [ $CRI == "docker" ]; then
+        echoinfo "Set ip range(设置IP范围):\n";read -r -e -i "${LINK_SUBNET}" SET_RANGE
+    else
+    	SET_RANGE=$LINK_SUBNET
+    fi
     local NET_CMD
     local AUX
-    AUX=--aux-address=$(hostname)=${LINK_HOSTIP}
+    if [[ $CRI == "podman" ]]; then
+        only_ins_network_podman_dhcp
+        AUX=""
+    else
+    	AUX=--aux-address=$(hostname)=${LINK_HOSTIP}
+    fi
 
-    NET_CMD="docker network create -d macvlan --subnet=\"${LINK_SUBNET}\" \
-    --gateway=\"${LINK_GW}\" ${AUX} \
-    --ip-range=\"${SET_RANGE}\" \
+
+    NET_CMD="$CRI network create -d macvlan --subnet=${LINK_SUBNET} \
+    --gateway=${LINK_GW} ${AUX} \
+    --ip-range=${SET_RANGE} \
     -o parent=${LINK} -o macvlan_mode=bridge bxc1"
     echo "$NET_CMD"
     #创建macvlan 网络
@@ -1007,7 +1070,11 @@ only_net_set_bridge(){
     if ! only_net_check_network ; then
         return 3
     fi
+    return 0;
 }
+
+
+
 generate_mac_addr(){
     # 随机生成mac
     random_mac_addr=$(od /dev/urandom -w4 -tx1 -An|sed -e 's/ //' -e 's/ /:/g'|head -n 1)
@@ -1027,6 +1094,7 @@ generate_mac_addr(){
         mac_addr=$(od /dev/urandom -w6 -tx1 -An|sed -e 's/ //' -e 's/ /:/g'|head -n 1)
         echoinfo "Generate a mac address: $mac_addr\n"
     fi
+
 }
 
 only_ins_network_docker_run(){
@@ -1066,12 +1134,12 @@ only_ins_network_docker_run(){
         local need_pubip=" -e NEED_PUBIP=1"
     fi
     local network_name
-    if docker network ls -f name=bxc --format "{{.Name}}"|grep -q 'bxc1'; then
+    if $CRI network ls -f name=bxc --format "{{.Name}}"|grep -q 'bxc1'; then
         network_name="--net=bxc1"
     else
         network_name="--net=bxc-macvlan"
     fi
-    command="docker run -d --restart=always  $network_name $set_ipaddress --mac-address=$mac_addr \
+    command="$CRI run -d --restart=always  $network_name $set_ipaddress --mac-address=$mac_addr \
         --sysctl net.ipv6.conf.all.disable_ipv6=0 --device /dev/net/tun --device /dev/ppp --cap-add=NET_ADMIN \
         -e bcode=${bcode} -e email=${email} ${ppp_account} ${need_pubip} --name=bxc-${bcode} \
         -v bxc_data_${bcode}:/opt/bcloud \
@@ -1084,18 +1152,18 @@ only_ins_network_docker_run(){
     echo "${con_id}"
     sleep 3
     # 检测绑定成功与否
-    fail_log=$(docker logs "${con_id}" 2>&1 |grep 'bonud fail'|head -n 1)
+    fail_log=$($CRI logs "${con_id}" 2>&1 |grep 'bonud fail'|head -n 1)
     if [[ -n "${fail_log}" ]]; then
         echoerr "bound fail\n${fail_log}\n"
-        docker stop "${con_id}"
-        docker rm "${con_id}"
+        $CRI stop "${con_id}"
+        $CRI rm "${con_id}"
         return 3
     fi
     # 检测是否为mac问题导致不能running,并清除
-    create_status=$(docker container inspect "${con_id}" --format "{{.State.Status}}")
+    create_status=$($CRI container inspect "${con_id}" --format "{{.State.Status}}")
     if [[ "$create_status" == "created" ]]; then
         echowarn "Delete can not run container\n"
-        docker container rm "${con_id}"
+        $CRI container rm "${con_id}"
         return 4
     else
         # 运行成功时,修改自身脚本定义的mac头为可用头
@@ -1124,17 +1192,24 @@ _only_net_get_image(){
     esac
     if [[ $_DON_DOWN_IMAGE -eq 0 ]]; then
         echoinfo "Downloading $image_name ...\n"
-        docker pull "${image_name}"
+        $CRI pull "${image_name}"
+        if [[ $? -ne 0 ]]; then
+            image_name="registry.cn-hangzhou.aliyuncs.com/bonuscloud/bxc-net:$VDIS"
+            $CRI pull "${image_name}"
+        fi
     else
         echowarn "Skip $image_name download\n"
     fi
-    if ! docker images --format "{{.Repository}}"|grep -q 'qinghon/bxc-net' ; then
-        echoerr "pull failed,exit!,you can try: docker pull ${image_name}\n"
+    if ! $CRI image inspect ${image_name} > /dev/null; then
+        echoerr "pull failed,exit!,you can try: $CRI pull ${image_name}\n"
         return 1
     fi
 }
 only_ins_network_docker_openwrt(){
-    ins_docker
+    case $CRI in
+        docker ) ins_docker;;
+        podman ) ins_podman;;
+    esac
     ins_jq
     local image_name=""
     local mac_head=""
@@ -1395,7 +1470,7 @@ _show_info(){
 only_net_show(){
     # 显示单网络任务的所有容器
     ins_jq
-    IDs=$(docker ps -a --filter="ancestor=qinghon/bxc-net:$VDIS" --format "{{.ID}}")
+    IDs=$($CRI ps -a --filter="ancestor=bxc-net:$VDIS" --format "{{.ID}}")
     echoerr  "num Status\ttun0 Status\tcontainer ID\t\tMAC\n"
     echoinfo "num Status\t\ttun0 Status\tIP\t\tMAC address\n"
     echo-
@@ -1406,14 +1481,14 @@ only_net_show(){
     run_num=0
     fail_num=0
     for i in $IDs; do
-        con_info=$(docker container inspect "$i")
+        con_info=$($CRI container inspect "$i")
         Status=$(echo "$con_info"|jq -r '.[]|.State.Status')
         if [[ "$Status" != "running" ]]; then
             fail_num=$(($fail_num+1))
             _show_info "$Status" "$fail_num" "$i" "1" "" ""
             continue
         fi
-        have_tun0=$(docker exec -it "$i" /bin/sh -c 'ip addr show dev tun0 >/dev/null 2>&1' 2>/dev/null;echo $?)
+        have_tun0=$($CRI exec -it "$i" /bin/sh -c 'ip addr show dev tun0 >/dev/null 2>&1' 2>/dev/null;echo $?)
         network_name=$(echo "$con_info"|jq -r '.[]|.NetworkSettings.Networks|to_entries|.[]|.key')
         if [[ "$network_name" == "bxc1" ]]; then
             ip_addr=$(echo "$con_info"|jq -r '.[]|.NetworkSettings.Networks.bxc1.IPAddress')
@@ -1611,6 +1686,8 @@ displayhelp(){
         "     └── -M        skip bxc-net docker image download"
         "     └── -e        export only network job certificate"
         "     └── -i        import only network job certificate"
+        "     └── -P        only net mode using pppoe in container."
+        "     └── -p        use podman start network process container"
         "    -A             Install all task component"
         "    -D             Don't set disk for node program"
         "    -I Interface   set interface name to you want"
@@ -1640,6 +1717,8 @@ displayhelp(){
         "     └── -M        跳过bxc-net镜像下载"
         "     └── -e        导出单网络任务证书"
         "     └── -i        导入单网络任务证书"
+        "     └── -P        单网络任务docker开启pppoe拨号"
+        "     └── -p        使用podman安装网络任务"
         "    -A             安装所有计算任务组件"
         "    -D             不初始化外挂硬盘"
         "    -I Interface   指定安装时使用的网卡"
@@ -1683,6 +1762,7 @@ _SYSARCH=1
 _INIT=0
 _NET_CONF=0
 _DOCKER_INS=0
+_USE_PODMAN=0
 _NODE_INS=0
 _REMOVE=0
 _TELEPORT=0
@@ -1705,12 +1785,13 @@ if [[ $# == 0 ]]; then
     install_all
 fi
 
-while  getopts "bdiknrstceghAI:DSHL:MPEZ:" opt ; do
+while  getopts "bdiknrstceghpAI:DSHL:MPEZ:" opt ; do
     case $opt in
         i ) _INIT=1         ;;
         b ) _BOUND=1        ;;
         c ) _CHANGE_KN=1    ;;
         d ) _DOCKER_INS=1   ;;
+        p ) _USE_PODMAN=1 ; CRI=podman  ;;
         k ) _K8S_INS=1      ;;
         n ) _NODE_INS=1     ;;
         r ) _REMOVE=1       ;;
@@ -1740,6 +1821,7 @@ done
 [[ $_DON_SET_DISK -eq 1 && $_SHOW_STATUS -eq 1 ]] &&_SHOW_STATUS=0 && show_disk_info
 [[ $_INIT -eq 1 ]]          &&init
 [[ $_DOCKER_INS -eq 1 ]]    &&ins_docker
+[[ $_USE_PODMAN -eq 1 ]]    &&ins_podman
 [[ $_NODE_INS -eq 1 ]]      &&node_ins
 [[ $_K8S_INS -eq 1 ]]       &&ins_k8s
 [[ $_TELEPORT -eq 1 ]]      &&teleport_ins
