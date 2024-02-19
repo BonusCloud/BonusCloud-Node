@@ -498,6 +498,7 @@ _k8s_ins_apt(){
 	apt-mark hold kubelet kubeadm kubernetes-cni
 	if [[ $OS == "ubuntu" ]]; then
 	    containerd config default > /etc/containerd/config.toml
+	    sed -i 's/SystemdCgroup = false/SystemdCgroup = true/g' /etc/containerd/config.toml
 	fi
 }
 _k8s_ins_static(){
