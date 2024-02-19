@@ -30,7 +30,7 @@ TMP="tmp"
 mkdir -p $TMP
 LOG_FILE="ins.log"
 
-K8S_LOW="1.12.3"
+K8S_LOW="1.27.1"
 DOC_LOW="1.11.1"
 DOC_HIG="20.12.12"
 
@@ -156,9 +156,9 @@ run_as_root(){
 }
 _check_pg(){
 	# Detection package manager
-	if which apt >/dev/null 2>&1 ; then
+	if which apt-get >/dev/null 2>&1 ; then
 		# echoinfo "Find apt\n"
-		PG="apt"
+		PG="apt-get"
 	elif which yum >/dev/null 2>&1 ; then
 		# echoinfo "Find yum\n"
 		PG="yum"
@@ -177,7 +177,7 @@ _check_exec(){
 _install_pg(){
 	[[ -z $PG ]] &&_check_pg
 	case ${PG} in
-		apt ) $PG install -y "$1";;
+		apt-get ) $PG install -y "$1";;
 		yum ) $PG install -y "$1" ;;
 		pacman ) $PG --needed --noconfirm -S "$1"
 	esac
@@ -186,7 +186,7 @@ _install_pg(){
 	fi
 	if [[ $? -ne 0 ]]; then
 		case ${PG} in
-			apt )  $PG update&& _install_pg "$1" apt-transport-https ;;
+			apt-get )  $PG update&& _install_pg "$1" apt-transport-https ;;
 			yum ) $PG makecache&& _install_pg "$1" ;;
 		esac
 	fi
@@ -251,16 +251,6 @@ check_doc(){
 		log "[info]" "docker not found"
 		return 1
 	fi
-	doc_v=$(docker version --format "{{.Server.Version}}")
-	if version_ge "${doc_v}" "${DOC_LOW}" && version_le "${doc_v}" "${DOC_HIG}" ; then
-		log "[info]" "dockerd version ${doc_v} above ${DOC_LOW} and below ${DOC_HIG}"
-		return 0
-	elif version_ge "${doc_v}" "${DOC_HIG}" ;then 
-		log "[warn]" "docker installed. but docker version ${doc_v}  not testing"
-		return 2
-	else
-		return 3
-	fi
 }
 check_k8s(){
 	# 检查k8s安装状态和版本
@@ -310,39 +300,22 @@ check_info(){
 }
 _docker_apt(){
 	# Install docker with APT
-	# apt 安装docker
-	apt install gnupg2 -y
+	# apt-get 安装docker
+	apt-get install gnupg2 -y
 	curl -fsSL "https://download.docker.com/linux/$OS/gpg" | apt-key add -
 	if [[ $? -ne 0 ]]; then
 		echoerr "add source public key failed ,check you network\n添加docker源公钥失败,检查您的网络配置,必要时请将download.docker.com加入代理\n"
 		return 2
 	fi
 	echo "deb https://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/$OS  $OS_CODENAME stable"  >/etc/apt/sources.list.d/docker.list
-	apt update
-	# 遍历版本号,安装不能超过限制的版本
-	for line in $(apt-cache madison docker-ce|awk '{print $3}') ; do
-		if version_le "$(echo "$line" |grep -E -o '([0-9]+\.){2}[0-9]+')" "$DOC_HIG" ; then
-			apt-mark unhold docker-ce
-			apt install -y --allow-downgrades docker-ce="$line" 
-			break
-		fi
-	done
-	apt-mark hold docker-ce 
+	apt-get update
+	apt-get install -y docker-ce
 }   
 _docker_yum(){
 	yum install -y yum-utils
 	yum-config-manager --add-repo  https://mirrors.aliyun.com/docker-ce/linux/centos/docker-ce.repo
 	yum makecache
-	for line in $(yum list docker-ce --showduplicates|grep 'docker-ce'|awk '{print $2}'|sort -r) ; do
-		if version_le "$(echo "$line" |grep -E -o '([0-9]+\.){2}[0-9]+')" "$DOC_HIG" ; then
-			yum remove  -y docer-ce docker-ce-cli
-			if echo "$line"|grep -q ':' ; then
-				line=$(echo "$line"|awk -F: '{print $2}')
-			fi
-			yum install -y docker-ce-"$line" 
-			break
-		fi
-	done
+	yum install -y docker-ce
 }
 _docker_static(){
 	curl https://raw.githubusercontent.com/docker/docker/master/contrib/check-config.sh > ${TMP}/check-config.sh
@@ -409,7 +382,7 @@ ins_docker(){
 	fi
 	env_check
 	case $PG in
-		apt ) _docker_apt ;;
+		apt-get ) _docker_apt ;;
 		yum ) _docker_yum ;;
 		pacman ) $PG --needed --noconfirm -S docker ethtool ;;
 		* ) _docker_static ;;
@@ -432,7 +405,7 @@ ins_docker(){
 ins_podman(){
 	env_check
 	case $PG in
-		apt ) apt install -y podman ;;
+		apt-get ) apt-get install -y podman ;;
 		pacman ) $PG --needed --noconfirm -S podman ;;
 		 * ) log "[error]" "package manager ${PG} not support podman"; return 1 ;;
 	esac
@@ -470,7 +443,7 @@ ins_jq(){
 	fi
 	_check_pg
 	case $PG in
-		apt     ) $PG install -y jq ;;
+		apt-get     ) $PG install -y jq ;;
 		yum     ) jq_yum_ins ;;
 		pacman  ) $PG -S jq ;;
 	esac
@@ -494,7 +467,7 @@ init(){
 }
 _lvm_ins(){
 	case $PG in
-		apt ) apt install -y lvm2;;
+		apt-get ) apt-get install -y lvm2;;
 		yum ) yum install -y lvm2;;
 	esac
 }
@@ -502,26 +475,31 @@ _k8s_ins_yum(){
 	printf "
 	[kubernetes]
 	name=Kubernetes
-	baseurl=https://mirrors.aliyun.com/kubernetes/yum/repos/kubernetes-el7-$(uname -m)/
+	baseurl=https://pkgs.k8s.io/core:/stable:/v1.27/rpm/
 	enabled=1
 	gpgcheck=1
 	repo_gpgcheck=1
-	gpgkey=https://mirrors.aliyun.com/kubernetes/yum/doc/yum-key.gpg https://mirrors.aliyun.com/kubernetes/yum/doc/rpm-package-key.gpg
+	exclude=kubelet kubeadm kubectl cri-tools kubernetes-cni
+	gpgkey=https://pkgs.k8s.io/core:/stable:/v1.27/rpm/repodata/repomd.xml.key
 	"|sed 's/    //g'> /etc/yum.repos.d/kubernetes.repo
 	setenforce 0
-	yum install  -y kubelet-1.12.3 kubeadm-1.12.3 kubectl-1.12.3 kubernetes-cni-0.6.0
+	yum install  -y kubelet-1.27.1
 	yum --exclude kubelet kubeadm kubernetes-cni
 	systemctl stop firewalld && systemctl disable firewalld
 	systemctl enable kubelet && systemctl start kubelet
 }
 _k8s_ins_apt(){
-	curl -L https://mirrors.aliyun.com/kubernetes/apt/doc/apt-key.gpg | apt-key add -
-	echo "deb https://mirrors.aliyun.com/kubernetes/apt/ kubernetes-xenial main"|tee /etc/apt/sources.list.d/kubernetes.list
+	curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.27/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+	echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.27/deb/ /' | tee /etc/apt/sources.list.d/kubernetes.list
 	log "[info]" "installing k8s"
-	apt update
+	apt-get update
 	apt-mark unhold kubelet kubeadm kubernetes-cni
-	apt install -y --allow-downgrades kubeadm=1.12.3-00  kubelet=1.12.3-00 kubectl=1.12.3-00 kubernetes-cni=0.6.0-00 
+	apt-get install -y --allow-downgrades kubeadm=1.27.1-1.1
 	apt-mark hold kubelet kubeadm kubernetes-cni
+	if [[ $OS == "ubuntu" ]]; then
+	    containerd config default > /etc/containerd/config.toml
+	    sed -i 's/SystemdCgroup = false/SystemdCgroup = true/g' /etc/containerd/config.toml
+	fi
 }
 _k8s_ins_static(){
 	sysArch
@@ -531,7 +509,7 @@ _k8s_ins_static(){
 	export CRICTL_VERSION="v1.13.0"
 	wget -O- "https://github.com/kubernetes-incubator/cri-tools/releases/download/${CRICTL_VERSION}/crictl-${CRICTL_VERSION}-linux-${VDIS}.tar.gz" | tar -C /usr/bin -xz
 
-	RELEASE="v1.12.3"
+	RELEASE="v1.27.1"
 	cd /usr/bin
 	curl -L --remote-name-all https://storage.googleapis.com/kubernetes-release/release/${RELEASE}/bin/linux/${VDIS}/{kubeadm,kubelet}
 	chmod +x {kubeadm,kubelet}
@@ -573,11 +551,11 @@ pull_docker_image(){
 		arm64 ) pause_TAG="arm-3.1"   ; proxy_name="kube-proxy-arm64"   ;;
 		amd64 ) pause_TAG="3.1"       ; proxy_name="kube-proxy"         ;;
 	esac
-	docker pull registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/pause:$pause_TAG
-	docker pull registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/$proxy_name:v1.12.3
+#	docker pull registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/pause:$pause_TAG
+#	docker pull registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/$proxy_name:v1.12.3
 
-	docker tag registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/pause:$pause_TAG k8s.gcr.io/pause:3.1
-	docker tag registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/$proxy_name:v1.12.3 k8s.gcr.io/kube-proxy:v1.12.3
+#	docker tag registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/pause:$pause_TAG k8s.gcr.io/pause:3.1
+#	docker tag registry.cn-beijing.aliyuncs.com/bxc_k8s_gcr_io/$proxy_name:v1.12.3 k8s.gcr.io/kube-proxy:v1.12.3
 }
 ins_k8s(){
 	swapoff -a
@@ -589,7 +567,7 @@ ins_k8s(){
 	if ! check_k8s ; then
 		init
 		case $PG in
-			apt ) _k8s_ins_apt ;;
+			apt-get ) _k8s_ins_apt ;;
 			yum ) _k8s_ins_yum ;;
 			*    ) _k8s_ins_static ;;
 		esac
@@ -610,7 +588,7 @@ ins_k8s(){
 	net.ipv4.tcp_congestion_control = bbr
 	net.ipv4.ip_forward = 1 "|sed 's/    //g'>/etc/sysctl.d/k8s.conf
 	modprobe br_netfilter
-	printf "\ntcp_bbr\n">>/etc/modules
+	printf "tcp_bbr\nip6table_filter\nip6table_nat\niptable_nat\nbr_netfilter\n" > /etc/modules-load.d/k8s.conf
 	sysctl -p /etc/sysctl.d/k8s.conf 2>/dev/null
 	log "[info]" "k8s install over"
 }
@@ -618,7 +596,7 @@ k8s_remove(){
 	kubeadm reset -f
 	case $PG in
 		yum ) $PG remove -y kubeadm kubelet kubectl ;;
-		apt ) $PG remove -y kubeadm kubelet kubectl --allow-change-held-packages ;;
+		apt-get ) $PG remove -y kubeadm kubelet kubectl --allow-change-held-packages ;;
 	esac
 	rm -rf /etc/sysctl.d/k8s.conf
 }
@@ -735,24 +713,24 @@ node_remove(){
 }
 bxc-network_ins(){
 	# 安装网络插件,用与连接到bxc网络
-	ret_4=$(apt list libcurl4 2>/dev/null|grep -q installed;echo $?)
+	ret_4=$(apt-get list libcurl4 2>/dev/null|grep -q installed;echo $?)
 	if [[ ${ret_4} -eq 0 ]]; then
 		log "[info]" "Install libcurl4 library bxc-network"
 		down "bxc-network_$ARCH" "${BASE_DIR}/bxc-network"
 		chmod +x ${BASE_DIR}/bxc-network
 	fi
-	ret_3=$(apt list libcurl3 2>/dev/null|grep -q installed;echo $?)
+	ret_3=$(apt-get list libcurl3 2>/dev/null|grep -q installed;echo $?)
 	if [[ ${ret_3} -eq 0 ]]; then
 		log "[info]" "Install libcurl3 library bxc-network"
 		down "5.0.0-aml-N1-BonusCloud/bxc-network_$ARCH" "${BASE_DIR}/bxc-network"
 		chmod +x ${BASE_DIR}/bxc-network
 	fi
-	apt install -y liblzo2-2 libjson-c3 
+	apt-get install -y liblzo2-2 libjson-c3 
 	${BASE_DIR}/bxc-network |grep libraries
 	printf "[Unit]
 	Description=bxc network daemon
 	After=network.target
-	
+
 	[Service]
 	ExecStart=/opt/bcloud/bxc-network
 	Restart=always
@@ -877,7 +855,7 @@ teleport_remove(){
 }
 iostat_ins(){
 	case $PG in
-		apt ) apt update&&apt install sysstat -y ;;
+		apt-get ) apt-get update&&apt-get install sysstat -y ;;
 		yum ) yum install sysstat -y ;;
 	esac
 }
@@ -886,7 +864,7 @@ smarttool_ins(){
 		return
 	fi
 	case $PG in
-		apt|yum ) $PG install smartmontools -y ;;
+		apt-get|yum ) $PG install smartmontools -y ;;
 		pacman ) $PG --needed --noconfirm -S smartmontools ;;
 	esac
 }
