@@ -588,7 +588,7 @@ ins_k8s(){
 	net.ipv4.tcp_congestion_control = bbr
 	net.ipv4.ip_forward = 1 "|sed 's/    //g'>/etc/sysctl.d/k8s.conf
 	modprobe br_netfilter
-	printf "tcp_bbr\nip6table_filter\nip6table_nat\niptable_nat\nbr_netfilter\n" > /etc/modules-load.d/k8s.conf
+	printf "tcp_bbr\nx_tables\nbr_netfilter\n" > /etc/modules-load.d/k8s.conf
 	sysctl -p /etc/sysctl.d/k8s.conf 2>/dev/null
 	log "[info]" "k8s install over"
 }
