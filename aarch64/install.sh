@@ -642,7 +642,7 @@ _set_node_systemd(){
 		
 		[Install]
 		WantedBy=multi-user.target
-	"|sed 's/    //g' >/lib/systemd/system/bxc-node.service
+	"|sed 's/	//g' >/lib/systemd/system/bxc-node.service
 }
 node_ins(){
 	mkdir -p $BASE_DIR/{scripts,nodeapi,compute}
