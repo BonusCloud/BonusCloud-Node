@@ -307,7 +307,7 @@ _docker_apt(){
 		echoerr "add source public key failed ,check you network\n添加docker源公钥失败,检查您的网络配置,必要时请将download.docker.com加入代理\n"
 		return 2
 	fi
-	echo "deb https://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/$OS  $OS_CODENAME stable"  >/etc/apt/sources.list.d/docker.list
+	echo "deb http://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/$OS  $OS_CODENAME stable"  >/etc/apt/sources.list.d/docker.list
 	apt-get update
 	apt-get install -y docker-ce
 }   
@@ -324,7 +324,7 @@ _docker_static(){
 		return 1
 	fi
 
-	wget -O ${TMP}/docker-18.06.3-ce.tgz "https://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/static/stable/${ARCH}/docker-18.06.3-ce.tgz"
+	wget -O ${TMP}/docker-18.06.3-ce.tgz "http://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/static/stable/${ARCH}/docker-18.06.3-ce.tgz"
 	tar -xvf ${TMP}/docker-18.06.3-ce.tgz
 	cp ${TMP}/docker/* /usr/bin/
 	groupadd docker --gid 999 --system
@@ -591,6 +591,7 @@ ins_k8s(){
 	printf "tcp_bbr\nx_tables\nbr_netfilter\n" > /etc/modules-load.d/k8s.conf
 	sysctl -p /etc/sysctl.d/k8s.conf 2>/dev/null
 	log "[info]" "k8s install over"
+	ins_conf
 }
 k8s_remove(){
 	kubeadm reset -f
@@ -632,7 +633,7 @@ _set_node_systemd(){
 	printf "
 		[Unit]
 		Description=bxc node app
-		After=network.target
+		After=docker.service
 		
 		[Service]
 		ExecStart=/opt/bcloud/nodeapi/node --alsologtostderr ${DON_SET_DISK} ${INSERT_STR} 
