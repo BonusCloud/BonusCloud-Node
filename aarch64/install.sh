@@ -302,14 +302,20 @@ _docker_apt(){
 	# Install docker with APT
 	# apt-get 安装docker
 	apt-get install gnupg2 -y
-	curl -fsSL "https://download.docker.com/linux/$OS/gpg" | apt-key add -
+	install -m 0755 -d /etc/apt/keyrings
+	curl -fsSL https://download.docker.com/linux/$OS/gpg | gpg --yes --dearmor -o /etc/apt/keyrings/docker.gpg
 	if [[ $? -ne 0 ]]; then
-		echoerr "add source public key failed ,check you network\n添加docker源公钥失败,检查您的网络配置,必要时请将download.docker.com加入代理\n"
-		return 2
+		# curl some time has bug, like ubuntu curl=7.81.0
+		wget -q https://download.docker.com/linux/$OS/gpg -O- | gpg --yes --dearmor -o /etc/apt/keyrings/docker.gpg
+		if [[ $? -ne 0 ]]; then
+			echoerr "add source public key failed ,check you network\n添加docker源公钥失败,检查您的网络配置,必要时请将download.docker.com加入代理\n"
+			return 2
+		fi
 	fi
-	echo "deb http://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/$OS  $OS_CODENAME stable"  >/etc/apt/sources.list.d/docker.list
+	chmod a+r /etc/apt/keyrings/docker.gpg
+	echo "deb [arch=${VDIS} signed-by=/etc/apt/keyrings/docker.gpg] http://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/$OS $OS_CODENAME stable" > /etc/apt/sources.list.d/docker.list
 	apt-get update
-	apt-get install -y docker-ce
+	apt-get install -y docker-ce docker-ce-cli
 }   
 _docker_yum(){
 	yum install -y yum-utils
