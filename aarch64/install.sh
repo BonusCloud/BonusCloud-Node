@@ -302,14 +302,20 @@ _docker_apt(){
 	# Install docker with APT
 	# apt-get 安装docker
 	apt-get install gnupg2 -y
-	curl -fsSL "https://download.docker.com/linux/$OS/gpg" | apt-key add -
+	install -m 0755 -d /etc/apt/keyrings
+	curl -fsSL https://download.docker.com/linux/$OS/gpg | gpg --yes --dearmor -o /etc/apt/keyrings/docker.gpg
 	if [[ $? -ne 0 ]]; then
-		echoerr "add source public key failed ,check you network\n添加docker源公钥失败,检查您的网络配置,必要时请将download.docker.com加入代理\n"
-		return 2
+		# curl some time has bug, like ubuntu curl=7.81.0
+		wget -q https://download.docker.com/linux/$OS/gpg -O- | gpg --yes --dearmor -o /etc/apt/keyrings/docker.gpg
+		if [[ $? -ne 0 ]]; then
+			echoerr "add source public key failed ,check you network\n添加docker源公钥失败,检查您的网络配置,必要时请将download.docker.com加入代理\n"
+			return 2
+		fi
 	fi
-	echo "deb https://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/$OS  $OS_CODENAME stable"  >/etc/apt/sources.list.d/docker.list
+	chmod a+r /etc/apt/keyrings/docker.gpg
+	echo "deb [arch=${VDIS} signed-by=/etc/apt/keyrings/docker.gpg] http://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/$OS $OS_CODENAME stable" > /etc/apt/sources.list.d/docker.list
 	apt-get update
-	apt-get install -y docker-ce
+	apt-get install -y docker-ce docker-ce-cli
 }   
 _docker_yum(){
 	yum install -y yum-utils
@@ -324,7 +330,7 @@ _docker_static(){
 		return 1
 	fi
 
-	wget -O ${TMP}/docker-18.06.3-ce.tgz "https://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/static/stable/${ARCH}/docker-18.06.3-ce.tgz"
+	wget -O ${TMP}/docker-18.06.3-ce.tgz "http://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/static/stable/${ARCH}/docker-18.06.3-ce.tgz"
 	tar -xvf ${TMP}/docker-18.06.3-ce.tgz
 	cp ${TMP}/docker/* /usr/bin/
 	groupadd docker --gid 999 --system
@@ -588,9 +594,10 @@ ins_k8s(){
 	net.ipv4.tcp_congestion_control = bbr
 	net.ipv4.ip_forward = 1 "|sed 's/    //g'>/etc/sysctl.d/k8s.conf
 	modprobe br_netfilter
-	printf "tcp_bbr\nip6table_filter\nip6table_nat\niptable_nat\nbr_netfilter\n" > /etc/modules-load.d/k8s.conf
+	printf "tcp_bbr\nx_tables\nbr_netfilter\n" > /etc/modules-load.d/k8s.conf
 	sysctl -p /etc/sysctl.d/k8s.conf 2>/dev/null
 	log "[info]" "k8s install over"
+	ins_conf
 }
 k8s_remove(){
 	kubeadm reset -f
@@ -632,7 +639,7 @@ _set_node_systemd(){
 	printf "
 		[Unit]
 		Description=bxc node app
-		After=network.target
+		After=docker.service
 		
 		[Service]
 		ExecStart=/opt/bcloud/nodeapi/node --alsologtostderr ${DON_SET_DISK} ${INSERT_STR} 
@@ -641,7 +648,7 @@ _set_node_systemd(){
 		
 		[Install]
 		WantedBy=multi-user.target
-	"|sed 's/    //g' >/lib/systemd/system/bxc-node.service
+	"|sed 's/	//g' >/lib/systemd/system/bxc-node.service
 }
 node_ins(){
 	mkdir -p $BASE_DIR/{scripts,nodeapi,compute}
