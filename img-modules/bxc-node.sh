@@ -5,15 +5,15 @@ TMPSYSTEMD="/tmp/bxc-node.service"
 NODEFILE="/opt/bcloud/nodeapi/node"
 ARCH="`uname -m`"
 
-curl -s --retry 5 "https://bxc-node.s3.cn-east-2.jdcloud-oss.com/info.txt" -o $TMPINFO
+curl -s --retry 5 "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules/info.txt" -o $TMPINFO
 SRCMD5=`grep "bxc-node_$ARCH" $TMPINFO | awk -F: '{print $2}'`
 
 install()
 {
 	mkdir -p /opt/bcloud/nodeapi/
 	[ -f /opt/bcloud/node.db ] || touch /opt/bcloud/node.db
-	curl -s --retry 5 "https://bxc-node.s3.cn-east-2.jdcloud-oss.com/bxc-node_$ARCH" -o $TMPFILE
-	curl -s --retry 5 "https://bxc-node.s3.cn-east-2.jdcloud-oss.com/bxc-node.service" -o $TMPSYSTEMD
+	curl -s --retry 5 "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules/bxc-node_$ARCH" -o $TMPFILE
+	curl -s --retry 5 "https://raw.githubusercontent.com/BonusCloud/BonusCloud-Node/master/img-modules/bxc-node.service" -o $TMPSYSTEMD
 
 	TMPMD5=`md5sum $TMPFILE | awk '{print $1}'`
 	if [ x"$TMPMD5" = x"$SRCMD5" ]
