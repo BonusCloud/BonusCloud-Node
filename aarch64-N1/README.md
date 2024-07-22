@@ -7,13 +7,10 @@ https://github.com/BonusCloud/BonusCloud-Node/tree/master/aarch64
 
 # 镜像安装
 ## 镜像下载
-```
-wget http://bonuscloud-imgs.oss.cn-north-1.jcloudcs.com/BonusCloud-LiteNode-N1-emmc-20181210.img.xz
-```
+
+[请前往官网下载中心下载镜像](https://console.bonuscloud.work/download)
 ## Android APP Download(安卓APP下载)
-```
-wget http://bonuscloud-imgs.oss.cn-north-1.jcloudcs.com/BonusCloud-LiteNode-admin-forPI.apk
-```
+[请前往官网下载中心下载](https://console.bonuscloud.work/download)
 ```
 wget https://play.google.com/store/apps/details?id=io.bonuscloud.app
 ```

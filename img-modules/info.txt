@@ -1,6 +1,6 @@
-bxc-node_aarch64:74f8daffe21fe1a637984e188b5e24ff:/opt/bcloud/nodeapi/node:0755
-bxc-node_armv7l:20ddced2943e6fe8a93e8ad4f5265cc6:/opt/bcloud/nodeapi/node:0755
-bxc-node_x86_64:9d0f1e7f5494305b09b8bca00c14157e:/opt/bcloud/nodeapi/node:0755
-dist.tar.xz_x86_64:a309bbb0182b18aad00b9ce6e79952c4:/opt/bcloud/nodeapi/dist.tar.xz:0644
-dist.tar.xz_aarch64:a309bbb0182b18aad00b9ce6e79952c4:/opt/bcloud/nodeapi/dist.tar.xz:0644
-dist.tar.xz_armv7l:a309bbb0182b18aad00b9ce6e79952c4:/opt/bcloud/nodeapi/dist.tar.xz:0644
+bxc-node_aarch64:4dfc0d311c5729f8db6f01f9eb8d69da:/opt/bcloud/nodeapi/node:0755
+bxc-node_armv7l:072d4ef590c5442f1766a1b67c76064e:/opt/bcloud/nodeapi/node:0755
+bxc-node_x86_64:6cc199aabdf5fed2b994cbf96c3ba70f:/opt/bcloud/nodeapi/node:0755
+dist.tar.xz_x86_64:1e6035aa388d0b25bfd9625cbebdbff0:/opt/bcloud/nodeapi/dist.tar.xz:0644
+dist.tar.xz_aarch64:1e6035aa388d0b25bfd9625cbebdbff0:/opt/bcloud/nodeapi/dist.tar.xz:0644
+dist.tar.xz_armv7l:1e6035aa388d0b25bfd9625cbebdbff0:/opt/bcloud/nodeapi/dist.tar.xz:0644
